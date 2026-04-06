@@ -1,0 +1,35 @@
+graph TD
+    A[Set varProcessDateTime] --> B[Set varSyncType]
+    B --> C[Set varFilePath]
+    C --> D[FullLoad Validation]
+¶
+    D -->|isFullLoad = true| E[Merge json files]
+    D -->|isFullLoad = false| Z[Error Occured]
+
+    E --> F[Set varMergeFileName]
+    F --> G[Merge files]
+    G --> H[Set varWarningFileName]
+    H --> I[Set varProcessFilesPath]
+    I --> J[Set varMergedFilesListFileName]
+    J --> K[PL_SFTP_Account_Inner_DF_part1]
+    K --> L[PL_SFTP_Account_Inner_DF_part2]
+    L --> M[Copy Merged files to Archive]
+    M --> N[Delete Merged files list]
+    N --> O[Delete Merged files list file - OnSuccess]
+    O --> P[Remove file from Landing folder_copy1]
+
+    K --> R[RunningTaskError_DFAccount]:::error
+    R --> S[Copy file to Error folder]
+    S --> T[Remove file from Landing folder]
+
+    L --> U[RunningTaskError_DFAccountUpdateBillTo]:::error
+    U --> V[Copy file to Error folder Update Bill To]
+    V --> W[Remove file from Landing folder Update Bill To]
+
+    K --> X[LookForWarningFile]
+    X --> Y[If WarningFile]
+    Y -->|true| AA[Set varWarningContent]
+    AA --> AB[RunningTaskError_WarningForManualUpdate]
+    Y --> AC[Delete WarningFile]
+
+    classDef error fill:#f8d7da,stroke:#b71c1c,color:#000;

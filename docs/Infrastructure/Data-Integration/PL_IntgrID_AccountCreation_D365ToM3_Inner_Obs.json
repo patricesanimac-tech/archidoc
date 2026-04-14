@@ -1,0 +1,651 @@
+{
+    "name": "PL_IntgrID_AccountCreation_D365ToM3_Inner_Obs",
+    "properties": {
+        "activities": [
+            {
+                "name": "ForEach Account to create",
+                "type": "ForEach",
+                "dependsOn": [
+                    {
+                        "activity": "Get Acounts to create",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "userProperties": [],
+                "typeProperties": {
+                    "items": {
+                        "value": "@activity('Get Acounts to create').output.value",
+                        "type": "Expression"
+                    },
+                    "isSequential": true,
+                    "activities": [
+                        {
+                            "name": "Validate if missing data",
+                            "type": "SetVariable",
+                            "dependsOn": [],
+                            "policy": {
+                                "secureOutput": false,
+                                "secureInput": false
+                            },
+                            "userProperties": [],
+                            "typeProperties": {
+                                "variableName": "varError",
+                                "value": {
+                                    "value": "@concat(if(and(and(contains(item(),'BusinessUnit_companym3'),not(equals(item().BusinessUnit_companym3,null))),not(equals(item().BusinessUnit_companym3,0))),'',' - Company M3 missing'),\n        if(and(contains(item(),'xrm_accounttype'),not(equals(item().xrm_accounttype,null))),if(or(or(equals(item().xrm_accounttype,163650000),equals(item().xrm_accounttype,163650001)),equals(item().xrm_accounttype,163650002)),'',' - Invalide Account Type'),' - Account Type missing'),\n        if(and(and(contains(item(),'ava_m3number'),not(equals(item().ava_m3number,null))),not(equals(replace(item().ava_m3number,' ',''),''))),'',' - Customer Number missing'),\n        if(and(and(contains(item(),'name'),not(equals(item().name,null))),not(equals(replace(item().name,' ',''),''))),'',' - Customer Name missing'),\n        if(and(and(contains(item(),'address2_line1'),not(equals(item().address2_line1,null))),not(equals(replace(item().address2_line1,' ',''),''))),'',' - Address2 Line 1 missing')\n       )",
+                                    "type": "Expression"
+                                }
+                            }
+                        },
+                        {
+                            "name": "If necessary to call CUSEXTMI_AddFieldValue_v2",
+                            "type": "IfCondition",
+                            "dependsOn": [
+                                {
+                                    "activity": "If necessary to call CRS610MI_ChgOrderInfo",
+                                    "dependencyConditions": [
+                                        "Succeeded"
+                                    ]
+                                }
+                            ],
+                            "userProperties": [],
+                            "typeProperties": {
+                                "expression": {
+                                    "value": "@and(and(contains(item(),'AdditionalPurchasingGroup_m3code'),not(equals(item().AdditionalPurchasingGroup_m3code,null))),not(equals(replace(item().AdditionalPurchasingGroup_m3code,' ',''),'')))",
+                                    "type": "Expression"
+                                },
+                                "ifTrueActivities": [
+                                    {
+                                        "name": "Call CUSEXTMI_AddFieldValu",
+                                        "type": "WebActivity",
+                                        "dependsOn": [],
+                                        "policy": {
+                                            "timeout": "0.0:01:30",
+                                            "retry": 0,
+                                            "retryIntervalInSeconds": 30,
+                                            "secureOutput": false,
+                                            "secureInput": false
+                                        },
+                                        "userProperties": [],
+                                        "typeProperties": {
+                                            "method": "GET",
+                                            "headers": {
+                                                "Authorization": {
+                                                    "value": "@pipeline().parameters.InforAPIBearerToken",
+                                                    "type": "Expression"
+                                                }
+                                            },
+                                            "url": {
+                                                "value": "@concat(variables('varInforAPIBaseURL'),\n        'M3/m3api-rest/v2/execute/CUSEXTMI/AddFieldValue?',\n        'FILE=OCUSMA',\n        '&PK01=',variables('varCustomerNumber'),\n        '&A030=',item().AdditionalPurchasingGroup_m3code,\n        '&maxrecs=0')",
+                                                "type": "Expression"
+                                            }
+                                        }
+                                    }
+                                ]
+                            }
+                        },
+                        {
+                            "name": "If necessary to call CRS610MI_ChgFinancial",
+                            "type": "IfCondition",
+                            "dependsOn": [
+                                {
+                                    "activity": "If necessary to call CRS610MI_ChgBasicData",
+                                    "dependencyConditions": [
+                                        "Succeeded"
+                                    ]
+                                }
+                            ],
+                            "userProperties": [],
+                            "typeProperties": {
+                                "expression": {
+                                    "value": "@equals(item().xrm_accounttype,163650001)",
+                                    "type": "Expression"
+                                },
+                                "ifTrueActivities": [
+                                    {
+                                        "name": "Call CRS610MI_ChgFinancial",
+                                        "type": "WebActivity",
+                                        "dependsOn": [],
+                                        "policy": {
+                                            "timeout": "0.0:01:30",
+                                            "retry": 0,
+                                            "retryIntervalInSeconds": 30,
+                                            "secureOutput": false,
+                                            "secureInput": false
+                                        },
+                                        "userProperties": [],
+                                        "typeProperties": {
+                                            "method": "GET",
+                                            "headers": {
+                                                "Authorization": {
+                                                    "value": "@pipeline().parameters.InforAPIBearerToken",
+                                                    "type": "Expression"
+                                                }
+                                            },
+                                            "url": {
+                                                "value": "@concat(variables('varInforAPIBaseURL'),\n        'M3/m3api-rest/v2/execute/CRS610MI/ChgFinancial?',\n        'CONO=',item().BusinessUnit_companym3,\n        '&CUNO=',variables('varCustomerNumber'),\n        if(and(and(contains(item(),'ava_tpsgsthst'),not(equals(item().ava_tpsgsthst,null))),not(equals(replace(item().ava_tpsgsthst,' ',''),''))),concat('&CORG=',item().ava_tpsgsthst),''),\n        if(and(and(contains(item(),'ava_tvppst'),not(equals(item().ava_tvppst,null))),not(equals(replace(item().ava_tvppst,' ',''),''))),concat('&COR2=',item().ava_tvppst),''),\n        if(and(contains(item(),'msdyn_taxexempt'),not(equals(item().msdyn_taxexempt,null))),if(equals(item().msdyn_taxexempt, true),'&VTCD=90',''),''),\n        '&maxrecs=0')",
+                                                "type": "Expression"
+                                            }
+                                        }
+                                    }
+                                ]
+                            }
+                        },
+                        {
+                            "name": "If missing data",
+                            "type": "IfCondition",
+                            "dependsOn": [
+                                {
+                                    "activity": "Validate if missing data",
+                                    "dependencyConditions": [
+                                        "Succeeded"
+                                    ]
+                                }
+                            ],
+                            "userProperties": [],
+                            "typeProperties": {
+                                "expression": {
+                                    "value": "@not(equals(trim(variables('varError')),''))",
+                                    "type": "Expression"
+                                },
+                                "ifTrueActivities": [
+                                    {
+                                        "name": "Missing data",
+                                        "type": "Fail",
+                                        "dependsOn": [],
+                                        "userProperties": [],
+                                        "typeProperties": {
+                                            "message": {
+                                                "value": "@concat('Account ', item().ava_m3number,\n        ' has not been sent to Infor for the following reason(s): ',\n        variables('varError'))",
+                                                "type": "Expression"
+                                            },
+                                            "errorCode": "500"
+                                        }
+                                    }
+                                ]
+                            }
+                        },
+                        {
+                            "name": "If necessary to call CRS610MI_ChgBasicData",
+                            "type": "IfCondition",
+                            "dependsOn": [
+                                {
+                                    "activity": "If necessary to call CUSEXTMI_AddFieldValue_v2",
+                                    "dependencyConditions": [
+                                        "Succeeded"
+                                    ]
+                                }
+                            ],
+                            "userProperties": [],
+                            "typeProperties": {
+                                "expression": {
+                                    "value": "@and(and(contains(item(),'ava_first3digitsofpostalcode'),not(equals(item().ava_first3digitsofpostalcode,null))),not(equals(replace(item().ava_first3digitsofpostalcode,' ',''),'')))",
+                                    "type": "Expression"
+                                },
+                                "ifTrueActivities": [
+                                    {
+                                        "name": "Call CRS610MI_ChgBasicData",
+                                        "type": "WebActivity",
+                                        "dependsOn": [],
+                                        "policy": {
+                                            "timeout": "0.0:01:30",
+                                            "retry": 0,
+                                            "retryIntervalInSeconds": 30,
+                                            "secureOutput": false,
+                                            "secureInput": false
+                                        },
+                                        "userProperties": [],
+                                        "typeProperties": {
+                                            "method": "GET",
+                                            "headers": {
+                                                "Authorization": {
+                                                    "value": "@pipeline().parameters.InforAPIBearerToken",
+                                                    "type": "Expression"
+                                                }
+                                            },
+                                            "url": {
+                                                "value": "@concat(variables('varInforAPIBaseURL'),\n        'M3/m3api-rest/v2/execute/CRS610MI/ChgBasicData?',\n        'CONO=',item().BusinessUnit_companym3,\n        '&CUNO=',variables('varCustomerNumber'),\n        '&RASN=',item().ava_first3digitsofpostalcode,\n        '&maxrecs=0')",
+                                                "type": "Expression"
+                                            }
+                                        }
+                                    }
+                                ]
+                            }
+                        },
+                        {
+                            "name": "If necessary to call CRS610MI_ChgOrderInfo",
+                            "type": "IfCondition",
+                            "dependsOn": [
+                                {
+                                    "activity": "If account is created",
+                                    "dependencyConditions": [
+                                        "Succeeded"
+                                    ]
+                                }
+                            ],
+                            "userProperties": [],
+                            "typeProperties": {
+                                "expression": {
+                                    "value": "@or(or(or(or(or(and(and(contains(item(),'Territory_code'),not(equals(item().Territory_code,null))),not(equals(replace(item().Territory_code,' ',''),''))),\n                     and(and(contains(item(),'BillTo_m3number'),not(equals(item().BillTo_m3number,null))),not(equals(replace(item().BillTo_m3number,' ',''),'')))),\n                 and(and(contains(item(),'Territory_m3code'),not(equals(item().Territory_m3code,null))),not(equals(replace(item().Territory_m3code,' ',''),'')))),\n             and(and(contains(item(),'BuyingGroup_m3code'),not(equals(item().BuyingGroup_m3code,null))),not(equals(replace(item().BuyingGroup_m3code,' ',''),'')))),\n         and(and(contains(item(),'ava_warehouse'),not(equals(item().ava_warehouse,null))),not(equals(replace(item().ava_warehouse,' ',''),'')))),\n     and(and(contains(item(),'SystemUser_ProfileManagerid'),not(equals(item().SystemUser_ProfileManagerid,null))),not(equals(replace(item().SystemUser_ProfileManagerid,' ',''),''))))",
+                                    "type": "Expression"
+                                },
+                                "ifTrueActivities": [
+                                    {
+                                        "name": "Call CRS610MI_ChgOrderInfo",
+                                        "type": "WebActivity",
+                                        "dependsOn": [],
+                                        "policy": {
+                                            "timeout": "0.0:01:30",
+                                            "retry": 0,
+                                            "retryIntervalInSeconds": 30,
+                                            "secureOutput": false,
+                                            "secureInput": false
+                                        },
+                                        "userProperties": [],
+                                        "typeProperties": {
+                                            "method": "GET",
+                                            "headers": {
+                                                "Authorization": {
+                                                    "value": "@pipeline().parameters.InforAPIBearerToken",
+                                                    "type": "Expression"
+                                                }
+                                            },
+                                            "url": {
+                                                "value": "@concat(variables('varInforAPIBaseURL'),\n        'M3/m3api-rest/v2/execute/CRS610MI/ChgOrderInfo?',\n        'CONO=',item().BusinessUnit_companym3,\n        '&CUNO=',variables('varCustomerNumber'),\n        if(and(and(contains(item(),'Territory_m3code'),not(equals(item().Territory_m3code,null))),not(equals(replace(item().Territory_m3code,' ',''),''))),concat('&SMCD=',item().Territory_m3code),''),\n        if(and(and(contains(item(),'BillTo_m3number'),not(equals(item().BillTo_m3number,null))),not(equals(replace(item().BillTo_m3number,' ',''),''))),concat('&PYNO=',item().BillTo_m3number),''),\n        if(and(and(contains(item(),'Territory_m3code'),not(equals(item().Territory_m3code,null))),not(equals(replace(item().Territory_m3code,' ',''),''))),concat('&SDST=',item().Territory_m3code),''),\n        if(and(and(contains(item(),'BuyingGroup_m3code'),not(equals(item().BuyingGroup_m3code,null))),not(equals(replace(item().BuyingGroup_m3code,' ',''),''))),concat('&CUCL=',item().BuyingGroup_m3code),''),\n        if(and(and(contains(item(),'ava_warehouse'),not(equals(item().ava_warehouse,null))),not(equals(replace(item().ava_warehouse,' ',''),''))),concat('&WHLO=',item().ava_warehouse),''),\n        if(and(and(contains(item(),'SystemUser_ProfileManagerid'),not(equals(item().SystemUser_ProfileManagerid,null))),not(equals(replace(item().SystemUser_ProfileManagerid,' ',''),''))),concat('&RESP=',item().SystemUser_ProfileManagerid),''),\n        '&maxrecs=0')",
+                                                "type": "Expression"
+                                            }
+                                        }
+                                    }
+                                ]
+                            }
+                        },
+                        {
+                            "name": "If account is created",
+                            "type": "IfCondition",
+                            "dependsOn": [
+                                {
+                                    "activity": "Call CRS610MI_Copy",
+                                    "dependencyConditions": [
+                                        "Succeeded"
+                                    ]
+                                }
+                            ],
+                            "userProperties": [],
+                            "typeProperties": {
+                                "expression": {
+                                    "value": "@greater(activity('Call CRS610MI_Copy').output.nrOfSuccessfullTransactions,0)\n",
+                                    "type": "Expression"
+                                },
+                                "ifFalseActivities": [
+                                    {
+                                        "name": "Account creation error",
+                                        "type": "Fail",
+                                        "dependsOn": [],
+                                        "userProperties": [],
+                                        "typeProperties": {
+                                            "message": {
+                                                "value": "@concat('Account ', item().ava_m3number,\n         ' has not been created in Infor. ErrorType: ',\n         activity('Call CRS610MI_Copy').output.results[0].errorType,\n         ', ErrorMessage: ',\n         activity('Call CRS610MI_Copy').output.results[0].errorMessage,\n         '.')",
+                                                "type": "Expression"
+                                            },
+                                            "errorCode": "500"
+                                        }
+                                    }
+                                ],
+                                "ifTrueActivities": [
+                                    {
+                                        "name": "Set CustomerNumber from API result",
+                                        "type": "SetVariable",
+                                        "dependsOn": [],
+                                        "policy": {
+                                            "secureOutput": false,
+                                            "secureInput": false
+                                        },
+                                        "userProperties": [],
+                                        "typeProperties": {
+                                            "variableName": "varCustomerNumber",
+                                            "value": {
+                                                "value": "@activity('Call CRS610MI_Copy').output.results[0].records[0].CUNO",
+                                                "type": "Expression"
+                                            }
+                                        }
+                                    }
+                                ]
+                            }
+                        },
+                        {
+                            "name": "Call CRS610MI_Copy",
+                            "type": "WebActivity",
+                            "dependsOn": [
+                                {
+                                    "activity": "Get 2 Chars StateProvince",
+                                    "dependencyConditions": [
+                                        "Succeeded"
+                                    ]
+                                }
+                            ],
+                            "policy": {
+                                "timeout": "0.0:01:30",
+                                "retry": 0,
+                                "retryIntervalInSeconds": 30,
+                                "secureOutput": false,
+                                "secureInput": false
+                            },
+                            "userProperties": [],
+                            "typeProperties": {
+                                "method": "GET",
+                                "headers": {
+                                    "Authorization": {
+                                        "value": "@pipeline().parameters.InforAPIBearerToken",
+                                        "type": "Expression"
+                                    }
+                                },
+                                "url": {
+                                    "value": "@concat(variables('varInforAPIBaseURL'),\n        'M3/m3api-rest/v2/execute/CRS610MI/Copy?',\n        'CONO=',item().BusinessUnit_companym3,\n        '&LNCD=',if(and(contains(item(),'xrm_language'),not(equals(item().xrm_language,null))),if(equals(item().xrm_language, 163650001),'FR','GB'),'GB'),\n        '&CUTM=',if(equals(item().xrm_accounttype,163650002),'ZTEMPL001',if(equals(item().xrm_accounttype,163650001),'ZTEMPP001','ZTEMPL002')),\n        '&CUNO=',item().ava_m3number,\n        '&CUNM=',replace(item().name,'#',''),\n        '&CUA1=',item().address2_line1,\n        if(and(and(contains(item(),'address2_postalcode'),not(equals(item().address2_postalcode,null))),not(equals(replace(item().address2_postalcode,' ',''),''))),toUpper(concat('&PONO=',substring(replace(item().address2_postalcode,' ',''),0,3),' ',substring(replace(item().address2_postalcode,' ',''),3,3))),''),\n        if(and(and(contains(item(),'telephone1'),not(equals(item().telephone1,null))),not(equals(replace(item().telephone1,' ',''),''))),concat('&PHNO=',substring(replace(replace(item().telephone1,' ',''),'-',''),0,3),'-',substring(replace(replace(item().telephone1,' ',''),'-',''),3,3),'-',substring(replace(replace(item().telephone1,' ',''),'-',''),6,4)),''),\n        if(and(and(contains(item(),'ava_divcomparamark'),not(equals(item().ava_divcomparamark,null))),not(equals(replace(item().ava_divcomparamark,' ',''),''))),concat('&PHN2=',item().ava_divcomparamark),''),\n        if(and(and(contains(item(),'fax'),not(equals(item().fax,null))),not(equals(replace(item().fax,' ',''),''))),concat('&TFNO=',substring(replace(replace(item().fax,' ',''),'-',''),0,3),'-',substring(replace(replace(item().fax,' ',''),'-',''),3,3),'-',substring(replace(replace(item().fax,' ',''),'-',''),6,4)),''),\n        if(and(and(contains(item(),'accountnumber'),not(equals(item().accountnumber,null))),not(equals(replace(item().accountnumber,' ',''),''))),concat('&ALCU=',item().accountnumber),''),\n        if(and(and(contains(item(),'ava_storenumber'),not(equals(item().ava_storenumber,null))),not(equals(replace(item().ava_storenumber,' ',''),''))),concat('&YRE2=',item().ava_storenumber),''),\n        if(equals(activity('Get 2 Chars StateProvince').output.nrOfSuccessfullTransactions,0),'',concat('&ECAR=',activity('Get 2 Chars StateProvince').output.results[0].records[0].REPL)),\n        if(equals(activity('Get 2 Chars Country').output.nrOfSuccessfullTransactions,0),'',concat('&CSCD=',activity('Get 2 Chars Country').output.results[0].records[0].REPL)),\n        if(and(and(contains(item(),'NationalGroup_m3code'),not(equals(item().NationalGroup_m3code,null))),not(equals(replace(item().NationalGroup_m3code,' ',''),''))),concat('&CFC1=',item().NationalGroup_m3code),''),\n        if(and(and(contains(item(),'telephone3'),not(equals(item().telephone3,null))),not(equals(replace(item().telephone3,' ',''),''))),concat('&CFC2=',item().telephone3),''),\n        if(and(and(contains(item(),'BusinessUnit_m3code'),not(equals(item().BusinessUnit_m3code,null))),not(equals(replace(item().BusinessUnit_m3code,' ',''),''))),concat('&CFC4=',item().BusinessUnit_m3code),''),\n        '&CFC7=',convertFromUtc(utcNow(),'Eastern Standard Time','yyyyMMdd'),\n        if(and(and(contains(item(),'PrimaryMarket_m3code'),not(equals(item().PrimaryMarket_m3code,null))),not(equals(replace(item().PrimaryMarket_m3code,' ',''),''))),concat('&CFC8=',item().PrimaryMarket_m3code),''),\n        '&CFC0=',if(and(contains(item(),'ava_kosher'),not(equals(item().ava_kosher,null))),if(equals(item().ava_kosher, true),'Y','N'),'N'),\n        if(and(and(contains(item(),'SecondaryMarket_m3code'),not(equals(item().SecondaryMarket_m3code,null))),not(equals(replace(item().SecondaryMarket_m3code,' ',''),''))),concat('&CFC9=',item().SecondaryMarket_m3code),''),\n        '&STAT=10',\n        if(and(and(contains(item(),'address2_city'),not(equals(item().address2_city,null))),not(equals(replace(item().address2_city,' ',''),''))),concat('&TOWN=',if(greater(length(item().address2_city),20),substring(item().address2_city,0,20),item().address2_city)),''),\n        '&maxrecs=0')",
+                                    "type": "Expression"
+                                }
+                            }
+                        },
+                        {
+                            "name": "Get 2 Chars Country",
+                            "type": "WebActivity",
+                            "dependsOn": [
+                                {
+                                    "activity": "If missing data",
+                                    "dependencyConditions": [
+                                        "Succeeded"
+                                    ]
+                                }
+                            ],
+                            "policy": {
+                                "timeout": "0.0:01:30",
+                                "retry": 0,
+                                "retryIntervalInSeconds": 30,
+                                "secureOutput": false,
+                                "secureInput": false
+                            },
+                            "userProperties": [],
+                            "typeProperties": {
+                                "method": "GET",
+                                "headers": {
+                                    "Authorization": {
+                                        "value": "@pipeline().parameters.InforAPIBearerToken",
+                                        "type": "Expression"
+                                    }
+                                },
+                                "url": {
+                                    "value": "@concat(variables('varInforAPIBaseURL'),\n        'M3/m3api-rest/v2/execute/EXPORTMI/SelectPad?SEPC=|&HDRS=0&QERY=CTSTKY from CSYTAB where CTCONO = ''',\n         item().BusinessUnit_companym3,\n         ''' and CTSTCO = ''CSCD'' and ',\n         if(equals(length(trim(item().address2_country)),2),concat('CTSTKY = ''',toUpper(item().address2_country)),concat('CTTX40 = ''',item().address2_country)),\n         '''&maxrecs=0')",
+                                    "type": "Expression"
+                                }
+                            }
+                        },
+                        {
+                            "name": "Get 2 Chars StateProvince",
+                            "type": "WebActivity",
+                            "dependsOn": [
+                                {
+                                    "activity": "Get 2 Chars Country",
+                                    "dependencyConditions": [
+                                        "Succeeded"
+                                    ]
+                                }
+                            ],
+                            "policy": {
+                                "timeout": "0.0:01:30",
+                                "retry": 0,
+                                "retryIntervalInSeconds": 30,
+                                "secureOutput": false,
+                                "secureInput": false
+                            },
+                            "userProperties": [],
+                            "typeProperties": {
+                                "method": "GET",
+                                "headers": {
+                                    "Authorization": {
+                                        "value": "@pipeline().parameters.InforAPIBearerToken",
+                                        "type": "Expression"
+                                    }
+                                },
+                                "url": {
+                                    "value": "@concat(variables('varInforAPIBaseURL'),\n        'M3/m3api-rest/v2/execute/EXPORTMI/SelectPad?SEPC=|&HDRS=0&QERY=CKECAR from CSYSTS where CKCONO = ''',\n         item().BusinessUnit_companym3,\n         ''' and CKCSCD = ''',\n         if(equals(activity('Get 2 Chars Country').output.nrOfSuccessfullTransactions,0),'',activity('Get 2 Chars Country').output.results[0].records[0].REPL),\n         ''' and ',\n         if(equals(length(trim(item().address2_stateorprovince)),2),concat('CKECAR = ''',toUpper(item().address2_stateorprovince)),concat('CKTX40 = ''',replace(item().address2_stateorprovince,'é','e'))),\n         '''&maxrecs=0')",
+                                    "type": "Expression"
+                                }
+                            }
+                        },
+                        {
+                            "name": "DataFlow AccountCreation",
+                            "type": "ExecuteDataFlow",
+                            "dependsOn": [
+                                {
+                                    "activity": "If necessary to call CRS610MI_ChgFinancial",
+                                    "dependencyConditions": [
+                                        "Succeeded"
+                                    ]
+                                }
+                            ],
+                            "policy": {
+                                "timeout": "0.00:10:00",
+                                "retry": 0,
+                                "retryIntervalInSeconds": 30,
+                                "secureOutput": false,
+                                "secureInput": false
+                            },
+                            "userProperties": [],
+                            "typeProperties": {
+                                "dataflow": {
+                                    "referenceName": "DF_D365_AccountCreation",
+                                    "type": "DataFlowReference",
+                                    "parameters": {
+                                        "df_CustomerNumber": {
+                                            "value": "'@{item().ava_m3number}'",
+                                            "type": "Expression"
+                                        },
+                                        "df_CustomerStage": {
+                                            "value": "'@{pipeline().parameters.CustomerStage_SyncProcessing}'",
+                                            "type": "Expression"
+                                        }
+                                    }
+                                },
+                                "compute": {
+                                    "coreCount": 8,
+                                    "computeType": "General"
+                                },
+                                "traceLevel": "Fine"
+                            }
+                        },
+                        {
+                            "name": "RunningTaskError_MissingData",
+                            "type": "Lookup",
+                            "dependsOn": [
+                                {
+                                    "activity": "If missing data",
+                                    "dependencyConditions": [
+                                        "Failed"
+                                    ]
+                                }
+                            ],
+                            "policy": {
+                                "timeout": "0.00:00:30",
+                                "retry": 0,
+                                "retryIntervalInSeconds": 30,
+                                "secureOutput": false,
+                                "secureInput": false
+                            },
+                            "userProperties": [],
+                            "typeProperties": {
+                                "source": {
+                                    "type": "MariaDBSource",
+                                    "query": {
+                                        "value": "@concat('CALL management.SP_RunningTaskErrorSynapse(''',\n        pipeline().parameters.RunningTask_TaskName,\n        ''',',\n        if(empty(pipeline().parameters.RunningTask_LogID),0,pipeline().parameters.RunningTask_LogID),\n        ',',\n        '0,',\n        '''Missing Data: Account', item().ava_m3number,\n        ' has not been sent for creation to Infor for the following reason(s): ',\n         variables('varError'), '. Pipeline Run ID: ', pipeline().RunId,\n        ''')')",
+                                        "type": "Expression"
+                                    }
+                                },
+                                "dataset": {
+                                    "referenceName": "DS_MariaDB",
+                                    "type": "DatasetReference"
+                                }
+                            }
+                        },
+                        {
+                            "name": "RunningTaskError_AccountCreationError",
+                            "type": "Lookup",
+                            "dependsOn": [
+                                {
+                                    "activity": "If account is created",
+                                    "dependencyConditions": [
+                                        "Failed"
+                                    ]
+                                }
+                            ],
+                            "policy": {
+                                "timeout": "0.00:00:30",
+                                "retry": 0,
+                                "retryIntervalInSeconds": 30,
+                                "secureOutput": false,
+                                "secureInput": false
+                            },
+                            "userProperties": [],
+                            "typeProperties": {
+                                "source": {
+                                    "type": "MariaDBSource",
+                                    "query": {
+                                        "value": "@concat('CALL management.SP_RunningTaskErrorSynapse(''',\n        pipeline().parameters.RunningTask_TaskName,\n        ''',',\n        if(empty(pipeline().parameters.RunningTask_LogID),0,pipeline().parameters.RunningTask_LogID),\n        ',',\n        '0,',\n        '''Error occur on creation of the Account ', item().ava_m3number,\n        ' has not been created in Infor. ErrorType: ',\n        activity('Call CRS610MI_Copy').output.results[0].errorType,\n         ', ErrorMessage: ',\n         activity('Call CRS610MI_Copy').output.results[0].errorMessage,\n         variables('varError'), '. Pipeline Run ID: ', pipeline().RunId,\n        ''')')",
+                                        "type": "Expression"
+                                    }
+                                },
+                                "dataset": {
+                                    "referenceName": "DS_MariaDB",
+                                    "type": "DatasetReference"
+                                }
+                            }
+                        }
+                    ]
+                }
+            },
+            {
+                "name": "Get Acounts to create",
+                "type": "Lookup",
+                "dependsOn": [
+                    {
+                        "activity": "Set varInforAPIBaseURL",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.00:01:00",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "source": {
+                        "type": "DynamicsSource",
+                        "query": "<fetch version=\"1.0\" output-format=\"xml-platform\" mapping=\"logical\" distinct=\"false\">\n  <entity name=\"account\">\n    <attribute name=\"accountid\" />\n    <attribute name=\"xrm_amname\" />\n    <attribute name=\"ava_m3number\" />\n    <attribute name=\"accountnumber\" />\n    <attribute name=\"ava_m3status\" />\n    <attribute name=\"address2_city\" />\n    <attribute name=\"address2_country\" />\n    <attribute name=\"address2_stateorprovince\" />\n    <attribute name=\"address2_line1\" />\n    <attribute name=\"address2_postalcode\" />\n    <attribute name=\"name\" />\n    <attribute name=\"telephone1\" />\n    <attribute name=\"telephone3\" />\n    <attribute name=\"fax\" />\n    <attribute name=\"xrm_language\" />\n    <attribute name=\"ava_kosher\" />\n    <attribute name=\"ava_storenumber\" />\n    <attribute name=\"ava_first3digitsofpostalcode\" />\n    <attribute name=\"msdyn_taxexempt\" />\n    <attribute name=\"ava_tpsgsthst\" />\n    <attribute name=\"ava_tvppst\" />\n    <attribute name=\"ava_warehouse\" />\n    <attribute name=\"xrm_accounttype\" />\n    <attribute name=\"ava_divcomparamark\" />\n    <order attribute=\"ava_m3number\" descending=\"false\" />\n    <filter type=\"and\">\n      <condition attribute=\"ava_customerstage\" operator=\"eq\" value=\"40\" />\n    </filter>\n    <link-entity name=\"account\" from=\"accountid\" to=\"xrm_billto\" visible=\"false\" link-type=\"outer\" alias=\"BillTo\">\n      <attribute name=\"ava_m3number\" alias=\"BillTo_m3number\"/>\n    </link-entity>\n    <link-entity name=\"territory\" from=\"territoryid\" to=\"xrm_district\" visible=\"false\" link-type=\"outer\" alias=\"Territory\">\n      <attribute name=\"ava_m3code\" alias=\"Territory_m3code\"/>\n      <attribute name=\"xrm_code\" alias=\"Territory_code\"/>\n      <link-entity name=\"systemuser\" from=\"systemuserid\" to=\"ava_profilemanager\" link-type=\"outer\" alias=\"SystemUser\">\n        <attribute name=\"smg_inforid\" alias=\"SystemUser_ProfileManagerid\"/>\n      </link-entity>\n    </link-entity>\n    <link-entity name=\"xrm_primarymarketsegment\" from=\"xrm_primarymarketsegmentid\" to=\"xrm_primarymarket\" visible=\"false\" link-type=\"outer\" alias=\"PrimaryMarket\">\n      <attribute name=\"xrm_code\" alias=\"PrimaryMarket_m3code\"/>\n    </link-entity>\n    <link-entity name=\"xrm_secondarymarketsegment\" from=\"xrm_secondarymarketsegmentid\" to=\"xrm_secondarymarket\" visible=\"false\" link-type=\"outer\" alias=\"SecondaryMarket\">\n      <attribute name=\"xrm_code\" alias=\"SecondaryMarket_m3code\"/>\n    </link-entity>\n    <link-entity name=\"xrm_buyinggroup\" from=\"xrm_buyinggroupid\" to=\"xrm_buyinggroup\" visible=\"false\" link-type=\"outer\" alias=\"BuyingGroup\">\n      <attribute name=\"xrm_code\" alias=\"BuyingGroup_m3code\"/>\n    </link-entity>\n    <link-entity name=\"ava_additionalpurchasinggroup\" from=\"ava_additionalpurchasinggroupid\" to=\"ava_additionalpurchasinggroup\" visible=\"false\" link-type=\"outer\" alias=\"AdditionalPurchasingGroup\">\n      <attribute name=\"ava_code\" alias=\"AdditionalPurchasingGroup_m3code\"/>\n    </link-entity>\n    <link-entity name=\"xrm_nationalgroup\" from=\"xrm_nationalgroupid\" to=\"xrm_national_group\" visible=\"false\" link-type=\"outer\" alias=\"NationalGroup\">\n      <attribute name=\"xrm_code\" alias=\"NationalGroup_m3code\"/>\n    </link-entity>\n    <link-entity name=\"businessunit\" from=\"businessunitid\" to=\"xrm_division\" visible=\"false\" link-type=\"outer\" alias=\"BusinessUnit\">\n      <attribute name=\"xrm_code\" alias=\"BusinessUnit_m3code\"/>\n      <attribute name=\"ava_companym3\" alias=\"BusinessUnit_companym3\"/>\n    </link-entity>\n  </entity>\n</fetch>"
+                    },
+                    "dataset": {
+                        "referenceName": "DS_D365_Account",
+                        "type": "DatasetReference"
+                    },
+                    "firstRowOnly": false
+                }
+            },
+            {
+                "name": "Get InforAPI BaseURL",
+                "type": "Lookup",
+                "dependsOn": [],
+                "policy": {
+                    "timeout": "0.00:00:30",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "source": {
+                        "type": "DynamicsSource",
+                        "query": "<fetch version=\"1.0\" output-format=\"xml-platform\" mapping=\"logical\" distinct=\"false\">\n  <entity name=\"ava_parameter\">\n    <attribute name=\"ava_value\" />\n    <order attribute=\"ava_name\" descending=\"false\" />\n    <filter type=\"and\">\n      <condition attribute=\"ava_name\" operator=\"eq\" value=\"InforAPIBaseURL\" />\n      <condition attribute=\"statecode\" operator=\"eq\" value=\"0\" />\n    </filter>\n  </entity>\n</fetch>"
+                    },
+                    "dataset": {
+                        "referenceName": "DS_D365_ParametersSMGS",
+                        "type": "DatasetReference"
+                    },
+                    "firstRowOnly": true
+                }
+            },
+            {
+                "name": "Set varInforAPIBaseURL",
+                "type": "SetVariable",
+                "dependsOn": [
+                    {
+                        "activity": "Get InforAPI BaseURL",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "variableName": "varInforAPIBaseURL",
+                    "value": {
+                        "value": "@activity('Get InforAPI BaseURL').output.firstRow.ava_value",
+                        "type": "Expression"
+                    }
+                }
+            }
+        ],
+        "parameters": {
+            "ForceRenewInforApiBearerToken": {
+                "type": "bool",
+                "defaultValue": false
+            },
+            "RunningTask_LogID": {
+                "type": "string",
+                "defaultValue": "0"
+            },
+            "RunningTask_TaskName": {
+                "type": "string",
+                "defaultValue": "RunningTask_TaskName"
+            },
+            "CustomerStage_SyncProcessing": {
+                "type": "string",
+                "defaultValue": "50"
+            },
+            "InforAPIBearerToken": {
+                "type": "string"
+            }
+        },
+        "variables": {
+            "varBearerToken": {
+                "type": "String"
+            },
+            "varError": {
+                "type": "String"
+            },
+            "varCustomerNumber": {
+                "type": "String"
+            },
+            "varAccountReadyToSync": {
+                "type": "Boolean",
+                "defaultValue": true
+            },
+            "varInforAPIBaseURL": {
+                "type": "String"
+            }
+        },
+        "folder": {
+            "name": "Integration Infor-D365"
+        },
+        "annotations": [],
+        "lastPublishTime": "2024-08-12T14:36:47Z"
+    },
+    "type": "Microsoft.DataFactory/factories/pipelines"
+}

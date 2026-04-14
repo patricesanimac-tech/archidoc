@@ -1,0 +1,265 @@
+@startuml SaniHub-BPMN-OrderToCash
+title SaniHub — BPMN : Processus Order-to-Cash
+
+participant "Client B2B\n(EDI)" as Client
+participant "TrueCommerce" as TC
+participant "SaniHub Hub" as Hub
+participant "Infor M3" as M3
+participant "Ortems" as Ortems
+participant "BBX\n(Warehouse)" as BBX
+participant "Expédition" as Ship
+
+== Phase 1 : Réception Commande ==
+Client ->> TC: Envoie EDI 850 (commande)
+activate TC
+TC ->> TC: Parse EDI, valide formatzzzz
+TC ->> Hub: POST /events/publish\n{CommandeClientRecue}
+deactivate TC
+
+== Phase 2 : Centralisation & Routage ==
+activate Hub
+Hub ->> Hub: Route decision:\nCommandeClientRecue → Canonical
+Hub ->> Hub: Transform: TrueCommerce → CommandeClient
+Hub ->> Hub: Routine policy:\n[M3, Ortems, Dynamics]
+Hub -->> TC: 200 Accepted (message_id: MSG-123)
+deactivate Hub
+
+== Phase 3 : Notification à M3 ==
+Hub ->> M3: Event: CommandeClientCree (canonical)
+activate M3
+M3 ->> M3: M3 Connecteur reçoit\nTransform: Canonical → Format M3
+M3 ->> M3: Crée order, valide stock
+M3 -->> Hub: Event: CommandeM3Created\n+ M3_OrderId
+deactivate M3
+
+== Phase 4 : Notification à Ortems ==
+Hub ->> Ortems: Event: CommandeClientCree (canonical)
+activate Ortems
+Ortems ->> Ortems: Ortems Connecteur reçoit\nTransform: Canonical → Format Ortems
+Ortems ->> Ortems: Crée ODF (Ordre Fabrication)\nRéserve ressources
+note over Ortems: Parallel execution\nwith M3
+Ortems -->> Hub: Event: OdfCreated\n+ Ortems_OdfId
+deactivate Ortems
+
+== Phase 5 : Génération Picklist ==
+Hub ->> BBX: Event: OdfCreated\n(ou Picklist.Generate)
+activate BBX
+BBX ->> BBX: Génère picklist\nRéserve articles warehouse
+BBX -->> Hub: Event: PicklistGenerated\n+ picklist_id
+deactivate BBX
+
+== Phase 6 : Fulfilment & Expédition ==
+parallel
+    BBX ->> Ortems: Je suis prêt à picker
+    Ortems ->> Ortems: Confirme disponibilité ressources, ordonne picking
+    BBX ->> BBX: Picking + packing + labeling
+end
+
+== Phase 7 : Statut Expédition ==
+BBX ->> Hub: Event: ExpeditionPreparee\n+ shipping_number, tracking_url
+activate Hub
+Hub ->> Hub: Route to: [TrueCommerce, Dynamics, M3]
+Hub -->> BBX: 200 OK
+deactivate Hub
+
+== Phase 8 : Confirmation B2B ==
+Hub ->> TC: Event: ExpeditionPreparee
+activate TC
+TC ->> TC: Connecteur adapte → EDI 856 (Shipment Notice)
+TC ->> Client: Envoie EDI 856 au client (avec tracking)
+note over Client: Client receives shipment notice
+deactivate TC
+
+== Phase 9 : Clôture Commande ==
+Hub ->> M3: Event: ExpeditionPreparee
+activate M3
+M3 ->> M3: Ferme order, statut = Shipped
+M3 -->> Hub: Event: CommandeFinalisee
+deactivate M3
+
+== Traçabilité ==
+note over Hub
+Chaque événement contient:
+- correlation_id = CMD-12345 (commande origin)
+- timestamp, source_app, target_apps
+- status (Published → Routed → Delivered)
+
+Dashboard SaniHub peut répondre "Où est la commande 12345 ?":
+1. ✓ TrueCommerce.CommandeClientRecue (10:53:01)
+2. ✓ Hub.CommandeClientCree (10:53:02)
+3. ✓ M3.CommandeM3Created (10:53:05, M3-87654)
+4. ✓ Ortems.OdfCreated (10:53:06, ODF-555)
+5. ✓ BBX.PicklistGenerated (10:53:30, PL-999)
+6. ✓ BBX.ExpeditionPreparee (11:45:00, TRK-ABC123)
+7. ✓ TC.EDI856Sent (11:45:15)
+8. ✓ M3.CommandeFinalisee (11:45:30)
+end note
+
+@enduml
+
+---
+
+@startuml SaniHub-BPMN-ProducureToPay
+title SaniHub — BPMN : Processus Procure-to-Pay
+
+participant "M3\n(Planning)" as M3
+participant "SaniHub Hub" as Hub
+participant "Ortems" as Ortems
+participant "BBX" as BBX
+participant "External\nSupplier" as Supplier
+participant "Dynamics 365\n(Finance)" as D365
+
+== Phase 1 : Planification Besoins ==
+M3 ->> M3: M3 Planification crée besoins\n(Stock seuil atteint, production needs)
+M3 ->> Hub: Event: BesoinsCreationDemandee\n{article, qty, dateLivraison}
+activate Hub
+
+== Phase 2 : Création Commande Achat ==
+Hub ->> Hub: Route: BesoinsCreationDemandee → EnrichedPO
+Hub ->> Hub: Enrichit avec données fournisseur\n(best supplier, prix catalogue)
+Hub ->> Hub: Transform: canonical → CommandeAchat
+Hub -->> M3: 200 Accepted
+deactivate Hub
+
+== Phase 3 : Envoi Fournisseur ==
+Hub ->> Supplier: Event: CommandeAchat\n(EDI 850 ou email/API)
+activate Supplier
+note over Supplier: External supplier\nReceives PO (asynchrone)
+Supplier ->> Supplier: Supplier confirms reception
+Supplier -->> Hub: Event: PoConfirmed\n(tracking, delivery date)
+deactivate Supplier
+
+== Phase 4 : Livraison Marchandise ==
+Supplier ->> Supplier: Prépare shipment
+Supplier ->> BBX: Envoie colis
+activate BBX
+BBX ->> BBX: Reçoit marchandise\nscanne barcodes
+BBX ->> Hub: Event: ReceptionMarchandiseConfirmee\n{article, qty_recu, date_reception}
+deactivate BBX
+
+== Phase 5 : Mise à Jour Stock ==
+Hub ->> M3: Event: ReceptionMarchandiseConfirmee
+activate M3
+M3 ->> M3: M3 connecteur reçoit\nMet à jour stock, disponibilité
+M3 -->> Hub: Event: StockMisAJour\n{article, qty_available}
+deactivate M3
+
+== Phase 6 : Facturation ==
+Supplier ->> Supplier: Prépare facture
+Supplier ->> D365: Envoie facture (email, API, EDI 810)
+activate D365
+D365 ->> Hub: Event: FactureRecue\n{po_id, qty_facture, montant, due_date}
+
+== Phase 7 : Reconciliation Finance ==
+Hub ->> D365: Event: ReceptionMarchandiseConfirmee\n(2-way matching: PO ↔ Goods ↔ Invoice)
+note over D365: 3-way matching workflow\nPO ↔ Goods Receipt ↔ Invoice
+D365 ->> D365: Valide: qty et montant OK?\nPas d'écart
+D365 -->> Hub: Event: FactureValidee\nStatus: Ready for payment
+
+== Phase 8 : Paiement ==
+D365 ->> D365: Crée payment instruction\nSchedule payment date
+D365 -->> Supplier: Wire transfer / Payment (external system)
+
+== Traçabilité ==
+note over Hub
+Chaque événement contient:
+- correlation_id = PO-67890 (purchase order origin)
+- timestamp, source_app, target_apps
+
+Dashboard SaniHub pour "État de la PO 67890 ?":
+1. ✓ M3.BesoinsCreationDemandee (2026-04-13 14:00)
+2. ✓ Hub.CommandeAchatCree (2026-04-13 14:01)
+3. ✓ Supplier.PoConfirmed (2026-04-14 09:30)
+4. ✓ BBX.ReceptionMarhandiseConfirmee (2026-04-20 10:15)
+5. ✓ M3.StockMisAJour (2026-04-20 10:35)
+6. ✓ D365.FactureRecue (2026-04-21 08:00)
+7. ✓ D365.FactureValidee (2026-04-21 11:00, ready for payment)
+8. ✓ D365.PaymentProcessed (2026-04-28 EOD)
+end note
+
+@enduml
+
+---
+
+@startuml SaniHub-Event-Error-Handling
+title SaniHub — Scénario d'Erreur & Résilience
+
+participant "App Métier\n(M3, Dynamics)" as App
+participant "SaniHub\nAPI Gateway" as APIGateway
+participant "Message\nBroker" as Broker
+participant "Connecteur\nCible" as Connector
+participant "App\nCible" as TargetApp
+participant "Dead Letter\nQueue" as DLQ
+participant "Dashboard\n& Alert" as Alert
+
+== Scénario Normal ==
+App ->> APIGateway: POST /events/publish\n{CommandeClientCree}
+APIGateway ->> Broker: Publie event
+Broker ->> Connector: Envoi event au connecteur
+Connector ->> TargetApp: Écrit dans app cible
+TargetApp -->> Connector: 200 OK
+
+Connector ->> Broker: Publie event success\n{type: Delivered}
+note over Broker: Success path✓
+
+== Scénario d'Erreur Temporaire ==
+Connector ->> TargetApp: Connecteur écrit vers app\n(Ortems API)
+TargetApp -->> Connector: 503 Service Unavailable
+note over Connector: Retry logic activé
+
+Connector ->> Connector: Wait 1s, retry 1
+Connector ->> TargetApp: Retry 1 (backoff exponential)
+TargetApp -->> Connector: 503 Service Unavailable
+
+Connector ->> Connector: Wait 2s, retry 2
+Connector ->> TargetApp: Retry 2
+TargetApp -->> Connector: 503 Service Unavailable
+
+Connector ->> Connector: Wait 4s, retry 3
+Connector ->> TargetApp: Retry 3
+TargetApp -->> Connector: 200 OK
+note over Connector: Eventual success ✓
+
+Connector ->> Broker: Publie event EventuallyDelivered
+alert_level = INFO (logged for monitoring)
+
+== Scénario d'Erreur Permanente ==
+Connector ->> TargetApp: Connecteur écrit\n(Ortems down, infrastructure issue)
+TargetApp -->> Connector: Connection timeout
+
+loop Retry 1/2/3 (with backoff)
+    Connector ->> TargetApp: Retry (fail)
+end
+
+Connector ->> DLQ: Envoie event à Dead Letter Queue
+note over DLQ: {event, error_reason, last_attempt_time}
+
+Connector ->> Broker: Publie event Failed\n{type: DeliveryFailed, error: "Ortems::Timeout"}
+
+Broker ->> Alert: Déclenche alerte\n(Severity: CRITICAL)
+Alert ->> Alert: Slack/Email à équipe on-call\n"Ortems intégration down, 50 events in DLQ"
+
+== Opérateur IT : Diagnostic & Replay ==
+Alert ->> Dashboard: Opérateur ouvre dashboard\nVoit : "Ortems: DLQ = 50 events, last error = Connection timeout"
+
+Dashboard ->> Dashboard: Opérateur investigate\nOrtems service status? Firewall? DB issues?
+
+Note over Alert: Ortems équipe répond:\n"Infra maintenance terminée 15:30"
+
+== Opérateur IT : Manual Replay ==
+Dashboard ->> APIGateway: POST /admin/replay\n{correlation_ids: [CMD-12345, CMD-12346, ...], source: DLQ}
+
+APIGateway ->> Broker: Ré-publie events from DLQ\n(avec flag: retry_from_dlq=true)
+
+Broker ->> Connector: Re-envoi connecteur
+
+Connector ->> TargetApp: Écrit à nouveau\n(Ortems maintenant en ligne)
+TargetApp -->> Connector: 200 OK
+note over Connector: Success ✓
+
+Connector ->> Broker: Publie event Replayed\n{original_correlation_id, replayed_at}
+
+Dashboard ->> Alert: Affiche: "Replay successful: 50/50 events delivered"
+Alert -->> Alert: Alerte résolue, tickets fermés
+
+@enduml

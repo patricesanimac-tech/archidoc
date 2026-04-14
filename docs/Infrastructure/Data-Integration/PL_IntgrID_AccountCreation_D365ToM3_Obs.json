@@ -1,0 +1,497 @@
+{
+    "name": "PL_IntgrID_AccountCreation_D365ToM3_Obs",
+    "properties": {
+        "activities": [
+            {
+                "name": "RunningTaskStart",
+                "type": "Lookup",
+                "dependsOn": [],
+                "policy": {
+                    "timeout": "0.00:00:30",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "source": {
+                        "type": "MariaDBSource",
+                        "query": {
+                            "value": "@concat('CALL management.SP_RunningTaskStart(''',\n        pipeline().Pipeline,\n        ''',''0'')')",
+                            "type": "Expression"
+                        }
+                    },
+                    "dataset": {
+                        "referenceName": "DS_MariaDB",
+                        "type": "DatasetReference"
+                    }
+                }
+            },
+            {
+                "name": "RunningTaskEnd",
+                "type": "Lookup",
+                "dependsOn": [
+                    {
+                        "activity": "Until no more Accounts to sync",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.00:00:30",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "source": {
+                        "type": "MariaDBSource",
+                        "query": {
+                            "value": "@concat('CALL management.SP_RunningTaskEnd(''',\n        pipeline().Pipeline,\n        ''',''',\n        variables('varRunningTask_LogID'),\n        ''')')",
+                            "type": "Expression"
+                        }
+                    },
+                    "dataset": {
+                        "referenceName": "DS_MariaDB",
+                        "type": "DatasetReference"
+                    }
+                }
+            },
+            {
+                "name": "Set varRunningTask_LogID",
+                "type": "SetVariable",
+                "dependsOn": [
+                    {
+                        "activity": "RunningTaskStart",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "variableName": "varRunningTask_LogID",
+                    "value": {
+                        "value": "@string(activity('RunningTaskStart').output.firstRow.LogID)",
+                        "type": "Expression"
+                    }
+                }
+            },
+            {
+                "name": "RunningTaskError_RTStart",
+                "type": "Lookup",
+                "dependsOn": [
+                    {
+                        "activity": "RunningTaskStart",
+                        "dependencyConditions": [
+                            "Failed"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.00:00:30",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "source": {
+                        "type": "MariaDBSource",
+                        "query": {
+                            "value": "@concat('CALL management.SP_RunningTaskErrorSynapse(''',\n        pipeline().Pipeline,\n        ''',',\n        if(empty(variables('varRunningTask_LogID')),0,variables('varRunningTask_LogID')),\n        ',',\n        '1,',\n        '''Error Data: ', replace(string(activity('RunningTaskStart').error),'''',''''''),'\nPipeline Run ID: ', pipeline().RunId,\n        ''')')",
+                            "type": "Expression"
+                        }
+                    },
+                    "dataset": {
+                        "referenceName": "DS_MariaDB",
+                        "type": "DatasetReference"
+                    }
+                }
+            },
+            {
+                "name": "RunningTaskError_RTEnd",
+                "type": "Lookup",
+                "dependsOn": [
+                    {
+                        "activity": "RunningTaskEnd",
+                        "dependencyConditions": [
+                            "Failed"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.00:00:30",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "source": {
+                        "type": "MariaDBSource",
+                        "query": {
+                            "value": "@concat('CALL management.SP_RunningTaskErrorSynapse(''',\n        pipeline().Pipeline,\n        ''',',\n        if(empty(variables('varRunningTask_LogID')),0,variables('varRunningTask_LogID')),\n        ',',\n        '1,',\n        '''Error Data: ', replace(string(activity('RunningTaskEnd').error),'''',''''''),'\nPipeline Run ID: ', pipeline().RunId,\n        ''')')",
+                            "type": "Expression"
+                        }
+                    },
+                    "dataset": {
+                        "referenceName": "DS_MariaDB",
+                        "type": "DatasetReference"
+                    }
+                }
+            },
+            {
+                "name": "PL_InforUtil_BearerTokenToAKV",
+                "type": "ExecutePipeline",
+                "dependsOn": [
+                    {
+                        "activity": "Set varRunningTask_LogID",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "pipeline": {
+                        "referenceName": "PL_InforUtil_BearerTokenToAKV",
+                        "type": "PipelineReference"
+                    },
+                    "waitOnCompletion": true,
+                    "parameters": {
+                        "paramForceGenNewToken": {
+                            "value": "@pipeline().parameters.ForceRenewInforApiBearerToken",
+                            "type": "Expression"
+                        }
+                    }
+                }
+            },
+            {
+                "name": "GetBearerTokenFromAKV",
+                "type": "WebActivity",
+                "dependsOn": [
+                    {
+                        "activity": "PL_InforUtil_BearerTokenToAKV",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.0:01:00",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": true,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "method": "GET",
+                    "url": "https://sanimarcdev-kv.vault.azure.net/secrets/InforAPI-BearerToken-Value/?api-version=7.0",
+                    "authentication": {
+                        "type": "MSI",
+                        "resource": "https://vault.azure.net"
+                    }
+                }
+            },
+            {
+                "name": "Set varBearerToken",
+                "type": "SetVariable",
+                "dependsOn": [
+                    {
+                        "activity": "GetBearerTokenFromAKV",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "variableName": "varBearerToken",
+                    "value": {
+                        "value": "Bearer @{activity('GetBearerTokenFromAKV').output.value}",
+                        "type": "Expression"
+                    }
+                }
+            },
+            {
+                "name": "Until no more Accounts to sync",
+                "type": "Until",
+                "dependsOn": [
+                    {
+                        "activity": "Set varBearerToken",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "userProperties": [],
+                "typeProperties": {
+                    "expression": {
+                        "value": "@not(variables('varAccountReadyToSync'))",
+                        "type": "Expression"
+                    },
+                    "activities": [
+                        {
+                            "name": "Look if new Account to sync",
+                            "type": "Lookup",
+                            "dependsOn": [
+                                {
+                                    "activity": "Execute _Inner",
+                                    "dependencyConditions": [
+                                        "Succeeded"
+                                    ]
+                                }
+                            ],
+                            "policy": {
+                                "timeout": "0.00:01:00",
+                                "retry": 0,
+                                "retryIntervalInSeconds": 30,
+                                "secureOutput": false,
+                                "secureInput": false
+                            },
+                            "userProperties": [],
+                            "typeProperties": {
+                                "source": {
+                                    "type": "DynamicsSource",
+                                    "query": "<fetch version=\"1.0\" output-format=\"xml-platform\" mapping=\"logical\" distinct=\"false\">\n  <entity name=\"account\">\n    <attribute name=\"accountid\" />\n    <order attribute=\"ava_m3number\" descending=\"false\" />\n    <filter type=\"and\">\n      <condition attribute=\"ava_customerstage\" operator=\"eq\" value=\"40\" />\n    </filter>\n    <link-entity name=\"account\" from=\"accountid\" to=\"xrm_billto\" visible=\"false\" link-type=\"outer\" alias=\"BillTo\">\n      <attribute name=\"ava_m3number\" alias=\"BillTo_m3number\"/>\n    </link-entity>\n    <link-entity name=\"territory\" from=\"territoryid\" to=\"xrm_district\" visible=\"false\" link-type=\"outer\" alias=\"Territory\">\n      <attribute name=\"ava_m3code\" alias=\"Territory_m3code\"/>\n      <link-entity name=\"systemuser\" from=\"systemuserid\" to=\"ava_profilemanager\" link-type=\"outer\" alias=\"SystemUser\">\n        <attribute name=\"smg_inforid\" alias=\"SystemUser_ProfileManagerid\"/>\n      </link-entity>\n    </link-entity>\n    <link-entity name=\"xrm_primarymarketsegment\" from=\"xrm_primarymarketsegmentid\" to=\"xrm_primarymarket\" visible=\"false\" link-type=\"outer\" alias=\"PrimaryMarket\">\n      <attribute name=\"xrm_code\" alias=\"PrimaryMarket_m3code\"/>\n    </link-entity>\n    <link-entity name=\"xrm_secondarymarketsegment\" from=\"xrm_secondarymarketsegmentid\" to=\"xrm_secondarymarket\" visible=\"false\" link-type=\"outer\" alias=\"SecondaryMarket\">\n      <attribute name=\"xrm_code\" alias=\"SecondaryMarket_m3code\"/>\n    </link-entity>\n    <link-entity name=\"xrm_buyinggroup\" from=\"xrm_buyinggroupid\" to=\"xrm_buyinggroup\" visible=\"false\" link-type=\"outer\" alias=\"BuyingGroup\">\n      <attribute name=\"xrm_code\" alias=\"BuyingGroup_m3code\"/>\n    </link-entity>\n    <link-entity name=\"ava_additionalpurchasinggroup\" from=\"ava_additionalpurchasinggroupid\" to=\"ava_additionalpurchasinggroup\" visible=\"false\" link-type=\"outer\" alias=\"AdditionalPurchasingGroup\">\n      <attribute name=\"ava_code\" alias=\"AdditionalPurchasingGroup_m3code\"/>\n    </link-entity>\n    <link-entity name=\"xrm_nationalgroup\" from=\"xrm_nationalgroupid\" to=\"xrm_national_group\" visible=\"false\" link-type=\"outer\" alias=\"NationalGroup\">\n      <attribute name=\"xrm_code\" alias=\"NationalGroup_m3code\"/>\n    </link-entity>\n    <link-entity name=\"businessunit\" from=\"businessunitid\" to=\"xrm_division\" visible=\"false\" link-type=\"outer\" alias=\"BusinessUnit\">\n      <attribute name=\"xrm_code\" alias=\"BusinessUnit_m3code\"/>\n    </link-entity>\n  </entity>\n</fetch>"
+                                },
+                                "dataset": {
+                                    "referenceName": "DS_D365_Account",
+                                    "type": "DatasetReference"
+                                },
+                                "firstRowOnly": true
+                            }
+                        },
+                        {
+                            "name": "Set varNbrAccountReadyToSync_Having",
+                            "type": "SetVariable",
+                            "dependsOn": [
+                                {
+                                    "activity": "Look if new Account to sync",
+                                    "dependencyConditions": [
+                                        "Succeeded"
+                                    ]
+                                }
+                            ],
+                            "policy": {
+                                "secureOutput": false,
+                                "secureInput": false
+                            },
+                            "userProperties": [],
+                            "typeProperties": {
+                                "variableName": "varAccountReadyToSync",
+                                "value": {
+                                    "value": "@contains(activity('Look if new Account to sync').output,'firstRow')",
+                                    "type": "Expression"
+                                }
+                            }
+                        },
+                        {
+                            "name": "Set varNbrAccountReadyToSync_Nothing",
+                            "type": "SetVariable",
+                            "dependsOn": [
+                                {
+                                    "activity": "Look if new Account to sync",
+                                    "dependencyConditions": [
+                                        "Failed"
+                                    ]
+                                }
+                            ],
+                            "policy": {
+                                "secureOutput": false,
+                                "secureInput": false
+                            },
+                            "userProperties": [],
+                            "typeProperties": {
+                                "variableName": "varAccountReadyToSync",
+                                "value": {
+                                    "value": "@bool(0)",
+                                    "type": "Expression"
+                                }
+                            }
+                        },
+                        {
+                            "name": "RunningTaskError_Exec",
+                            "type": "Lookup",
+                            "dependsOn": [
+                                {
+                                    "activity": "Execute _Inner",
+                                    "dependencyConditions": [
+                                        "Failed"
+                                    ]
+                                }
+                            ],
+                            "policy": {
+                                "timeout": "0.00:00:30",
+                                "retry": 0,
+                                "retryIntervalInSeconds": 30,
+                                "secureOutput": false,
+                                "secureInput": false
+                            },
+                            "userProperties": [],
+                            "typeProperties": {
+                                "source": {
+                                    "type": "MariaDBSource",
+                                    "query": {
+                                        "value": "@concat('CALL management.SP_RunningTaskErrorSynapse(''',\n        pipeline().Pipeline,\n        ''',',\n        if(empty(variables('varRunningTask_LogID')),0,variables('varRunningTask_LogID')),\n        ',',\n        '1,',\n        '''Error Data: ', replace(string(activity('Execute _Inner').error),'''',''''''),'\nPipeline Run ID: ', pipeline().RunId, '\nConsult Azure Synapse Monitor for more details.',\n        ''')')",
+                                        "type": "Expression"
+                                    }
+                                },
+                                "dataset": {
+                                    "referenceName": "DS_MariaDB",
+                                    "type": "DatasetReference"
+                                }
+                            }
+                        },
+                        {
+                            "name": "Execute _Inner",
+                            "type": "ExecutePipeline",
+                            "dependsOn": [],
+                            "policy": {
+                                "secureInput": false
+                            },
+                            "userProperties": [],
+                            "typeProperties": {
+                                "pipeline": {
+                                    "referenceName": "PL_IntgrID_AccountCreation_D365ToM3_Inner_Obs",
+                                    "type": "PipelineReference"
+                                },
+                                "waitOnCompletion": true,
+                                "parameters": {
+                                    "ForceRenewInforApiBearerToken": {
+                                        "value": "@pipeline().parameters.ForceRenewInforApiBearerToken",
+                                        "type": "Expression"
+                                    },
+                                    "RunningTask_LogID": {
+                                        "value": "@variables('varRunningTask_LogID')",
+                                        "type": "Expression"
+                                    },
+                                    "RunningTask_TaskName": {
+                                        "value": "@pipeline().Pipeline",
+                                        "type": "Expression"
+                                    },
+                                    "CustomerStage_SyncProcessing": {
+                                        "value": "@pipeline().parameters.CustomerStage_SyncProcessing",
+                                        "type": "Expression"
+                                    },
+                                    "InforAPIBearerToken": {
+                                        "value": "@variables('varBearerToken')",
+                                        "type": "Expression"
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            "name": "Set varNbrAccountReadyToSync_Fail",
+                            "type": "SetVariable",
+                            "dependsOn": [
+                                {
+                                    "activity": "RunningTaskError_Exec",
+                                    "dependencyConditions": [
+                                        "Succeeded"
+                                    ]
+                                }
+                            ],
+                            "policy": {
+                                "secureOutput": false,
+                                "secureInput": false
+                            },
+                            "userProperties": [],
+                            "typeProperties": {
+                                "variableName": "varAccountReadyToSync",
+                                "value": {
+                                    "value": "@bool(0)",
+                                    "type": "Expression"
+                                }
+                            }
+                        }
+                    ],
+                    "timeout": "0.00:15:00"
+                }
+            },
+            {
+                "name": "RunningTaskError_Until",
+                "type": "Lookup",
+                "dependsOn": [
+                    {
+                        "activity": "Until no more Accounts to sync",
+                        "dependencyConditions": [
+                            "Failed"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.00:00:30",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "source": {
+                        "type": "MariaDBSource",
+                        "query": {
+                            "value": "@concat('CALL management.SP_RunningTaskErrorSynapse(''',\n        pipeline().Pipeline,\n        ''',',\n        if(empty(variables('varRunningTask_LogID')),0,variables('varRunningTask_LogID')),\n        ',',\n        '1,',\n        '''Error Data: An error occur in the \"Until\" action. \nPipeline Run ID: ', pipeline().RunId, '\nConsult Azure Synapse Monitor for more details.',\n        ''')')",
+                            "type": "Expression"
+                        }
+                    },
+                    "dataset": {
+                        "referenceName": "DS_MariaDB",
+                        "type": "DatasetReference"
+                    }
+                }
+            }
+        ],
+        "parameters": {
+            "ForceRenewInforApiBearerToken": {
+                "type": "bool",
+                "defaultValue": false
+            },
+            "CustomerStage_SyncProcessing": {
+                "type": "string",
+                "defaultValue": "50"
+            }
+        },
+        "variables": {
+            "varRunningTask_LogID": {
+                "type": "String"
+            },
+            "varAccountReadyToSync": {
+                "type": "Boolean",
+                "defaultValue": true
+            },
+            "varUntilParams": {
+                "type": "String"
+            },
+            "varBearerToken": {
+                "type": "String"
+            }
+        },
+        "folder": {
+            "name": "Integration Infor-D365"
+        },
+        "annotations": [],
+        "lastPublishTime": "2024-08-12T14:36:48Z"
+    },
+    "type": "Microsoft.DataFactory/factories/pipelines"
+}

@@ -3,7 +3,10 @@ name: Agent Designer Subagent
 description: Subagent spécialisé pour générer des fichiers `.agent.md` détaillés et des workflows de subagents.
 argument-hint: Indique le rôle, le public cible, et les capacités attendues du nouvel agent.
 tools:
-[vscode/memory, read/readFile, search, web]
+  - vscode/memory
+  - read/readFile
+  - search
+  - web
 user-invocable: false
 disable-model-invocation: false
 target: vscode

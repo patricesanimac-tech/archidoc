@@ -1,0 +1,348 @@
+{
+    "name": "PL_IntgrID_Account_ValidateItemsNotSync_M3ToD365",
+    "properties": {
+        "activities": [
+            {
+                "name": "PL_InforUtil_BearerTokenToAKV",
+                "type": "ExecutePipeline",
+                "dependsOn": [],
+                "policy": {
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "pipeline": {
+                        "referenceName": "PL_InforUtil_BearerTokenToAKV",
+                        "type": "PipelineReference"
+                    },
+                    "waitOnCompletion": true,
+                    "parameters": {
+                        "paramForceGenNewToken": {
+                            "value": "@pipeline().parameters.ForceRenewInforApiBearerToken",
+                            "type": "Expression"
+                        }
+                    }
+                }
+            },
+            {
+                "name": "GetBearerTokenFromAKV",
+                "type": "WebActivity",
+                "dependsOn": [
+                    {
+                        "activity": "PL_InforUtil_BearerTokenToAKV",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.0:01:00",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "method": "GET",
+                    "url": "https://sanimarcdev-kv.vault.azure.net/secrets/InforAPI-BearerToken-Value/?api-version=7.0",
+                    "authentication": {
+                        "type": "MSI",
+                        "resource": " https://vault.azure.net"
+                    }
+                }
+            },
+            {
+                "name": "Copy M3 Result to ADLS file",
+                "type": "Copy",
+                "dependsOn": [
+                    {
+                        "activity": "GetBearerTokenFromAKV",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.00:01:00",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "source": {
+                        "type": "RestSource",
+                        "httpRequestTimeout": "00:01:30",
+                        "requestInterval": "00.00:00:00.010",
+                        "requestMethod": "GET",
+                        "additionalHeaders": {
+                            "Authorization": {
+                                "value": "Bearer @{activity('GetBearerTokenFromAKV').output.value}",
+                                "type": "Expression"
+                            }
+                        }
+                    },
+                    "sink": {
+                        "type": "JsonSink",
+                        "storeSettings": {
+                            "type": "AzureBlobFSWriteSettings"
+                        },
+                        "formatSettings": {
+                            "type": "JsonWriteSettings"
+                        }
+                    },
+                    "enableStaging": false
+                },
+                "inputs": [
+                    {
+                        "referenceName": "DS_REST_InforAPICall",
+                        "type": "DatasetReference",
+                        "parameters": {
+                            "APIUrl": {
+                                "value": "@concat('M3/m3api-rest/v2/execute/EXPORTMI/SelectPad?SEPC=|&HDRS=0&QERY=count(*) from OCUSMA where OKCONO = ',pipeline().globalParameters.InforCompanyNumber,' AND OKCUNO > ''',\n         pipeline().parameters.MinAccountNotRange,\n         ''' AND OKCUNO < ''',\n         pipeline().parameters.MaxAccountNotRange,\n         '''&maxrecs=0')",
+                                "type": "Expression"
+                            }
+                        }
+                    }
+                ],
+                "outputs": [
+                    {
+                        "referenceName": "DS_ADLS_Filename",
+                        "type": "DatasetReference",
+                        "parameters": {
+                            "ds_containerName": {
+                                "value": "@pipeline().parameters.containerName",
+                                "type": "Expression"
+                            },
+                            "ds_filePath": {
+                                "value": "@pipeline().parameters.ProcessFilesPath",
+                                "type": "Expression"
+                            },
+                            "ds_fileName": {
+                                "value": "@pipeline().parameters.AdlsFileNameM3Data",
+                                "type": "Expression"
+                            }
+                        }
+                    }
+                ]
+            },
+            {
+                "name": "Get NbrAccountsNotSync",
+                "type": "Lookup",
+                "dependsOn": [
+                    {
+                        "activity": "Copy M3 Result to ADLS file",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.00:01:00",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "source": {
+                        "type": "JsonSource",
+                        "storeSettings": {
+                            "type": "AzureBlobFSReadSettings",
+                            "recursive": true,
+                            "enablePartitionDiscovery": false
+                        },
+                        "formatSettings": {
+                            "type": "JsonReadSettings"
+                        }
+                    },
+                    "dataset": {
+                        "referenceName": "DS_ADLS_Filename",
+                        "type": "DatasetReference",
+                        "parameters": {
+                            "ds_containerName": {
+                                "value": "@pipeline().parameters.containerName",
+                                "type": "Expression"
+                            },
+                            "ds_filePath": {
+                                "value": "@pipeline().parameters.ProcessFilesPath",
+                                "type": "Expression"
+                            },
+                            "ds_fileName": {
+                                "value": "@pipeline().parameters.AdlsFileNameM3Data",
+                                "type": "Expression"
+                            }
+                        }
+                    },
+                    "firstRowOnly": false
+                }
+            },
+            {
+                "name": "Set varNbrAccountsNotSync",
+                "type": "SetVariable",
+                "dependsOn": [
+                    {
+                        "activity": "Get NbrAccountsNotSync",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "variableName": "varNbrAccountsNotSync",
+                    "value": {
+                        "value": "@activity('Get NbrAccountsNotSync').output.value[0].results[0].records[0].REPL",
+                        "type": "Expression"
+                    }
+                }
+            },
+            {
+                "name": "Delete AdlsFileNameM3Data",
+                "type": "Delete",
+                "dependsOn": [
+                    {
+                        "activity": "If number Accounts greater than 0",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.00:00:30",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "dataset": {
+                        "referenceName": "DS_ADLS_Filename",
+                        "type": "DatasetReference",
+                        "parameters": {
+                            "ds_containerName": {
+                                "value": "@pipeline().parameters.containerName",
+                                "type": "Expression"
+                            },
+                            "ds_filePath": {
+                                "value": "@pipeline().parameters.ProcessFilesPath",
+                                "type": "Expression"
+                            },
+                            "ds_fileName": {
+                                "value": "@pipeline().parameters.AdlsFileNameM3Data",
+                                "type": "Expression"
+                            }
+                        }
+                    },
+                    "enableLogging": false,
+                    "storeSettings": {
+                        "type": "AzureBlobFSReadSettings",
+                        "recursive": true,
+                        "enablePartitionDiscovery": false
+                    }
+                }
+            },
+            {
+                "name": "If number Accounts greater than 0",
+                "type": "IfCondition",
+                "dependsOn": [
+                    {
+                        "activity": "Set varNbrAccountsNotSync",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "userProperties": [],
+                "typeProperties": {
+                    "expression": {
+                        "value": "@greater(int(variables('varNbrAccountsNotSync')),0)",
+                        "type": "Expression"
+                    },
+                    "ifTrueActivities": [
+                        {
+                            "name": "RunningTaskError_ItmNotSync",
+                            "type": "Lookup",
+                            "dependsOn": [],
+                            "policy": {
+                                "timeout": "0.00:00:30",
+                                "retry": 0,
+                                "retryIntervalInSeconds": 30,
+                                "secureOutput": false,
+                                "secureInput": false
+                            },
+                            "userProperties": [],
+                            "typeProperties": {
+                                "source": {
+                                    "type": "MariaDBSource",
+                                    "query": {
+                                        "value": "@concat('CALL management.SP_RunningTaskErrorSynapse(''',\n        pipeline().parameters.RunningTask_TaskName,\n        ''',',\n        if(empty(pipeline().parameters.RunningTask_LogID),0,pipeline().parameters.RunningTask_LogID),\n        ',',\n        '0,',\n        '''Warning: The number of items in Infor exceed the number managed in FullLoad sync (Number of item(s): ',variables('varNbrAccountsNotSync'),\n        '). Pipeline Run ID: ', pipeline().RunId,\n        ''')')",
+                                        "type": "Expression"
+                                    }
+                                },
+                                "dataset": {
+                                    "referenceName": "DS_MariaDB",
+                                    "type": "DatasetReference"
+                                }
+                            }
+                        }
+                    ]
+                }
+            }
+        ],
+        "parameters": {
+            "containerName": {
+                "type": "string",
+                "defaultValue": "integration"
+            },
+            "ProcessFilesPath": {
+                "type": "string",
+                "defaultValue": "ToD365/Landing/Account/"
+            },
+            "AdlsFileNameM3Data": {
+                "type": "string",
+                "defaultValue": "NbrAccountsNotSync.json"
+            },
+            "ForceRenewInforApiBearerToken": {
+                "type": "bool",
+                "defaultValue": false
+            },
+            "RunningTask_LogID": {
+                "type": "string",
+                "defaultValue": "0"
+            },
+            "MinAccountNotRange": {
+                "type": "string",
+                "defaultValue": "684799"
+            },
+            "MaxAccountNotRange": {
+                "type": "string",
+                "defaultValue": "9999999"
+            },
+            "RunningTask_TaskName": {
+                "type": "string",
+                "defaultValue": "PL_IntgrID_Account_M3ToD365"
+            }
+        },
+        "variables": {
+            "varNbrAccountsNotSync": {
+                "type": "String",
+                "defaultValue": "0"
+            }
+        },
+        "folder": {
+            "name": "Integration Infor-D365"
+        },
+        "annotations": [],
+        "lastPublishTime": "2024-08-12T14:36:39Z"
+    },
+    "type": "Microsoft.DataFactory/factories/pipelines"
+}

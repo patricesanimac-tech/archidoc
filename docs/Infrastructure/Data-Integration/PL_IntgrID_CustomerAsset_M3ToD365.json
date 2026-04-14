@@ -1,0 +1,304 @@
+{
+    "name": "PL_IntgrID_CustomerAsset_M3ToD365",
+    "properties": {
+        "activities": [
+            {
+                "name": "RunningTaskStart",
+                "type": "Lookup",
+                "dependsOn": [],
+                "policy": {
+                    "timeout": "0.00:00:30",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "source": {
+                        "type": "MariaDBSource",
+                        "query": {
+                            "value": "@concat('CALL management.SP_RunningTaskStart(''',\n        pipeline().Pipeline,\n        ''',''0'')')",
+                            "type": "Expression"
+                        }
+                    },
+                    "dataset": {
+                        "referenceName": "DS_MariaDB",
+                        "type": "DatasetReference"
+                    }
+                }
+            },
+            {
+                "name": "Set varRunningTask_LogID",
+                "type": "SetVariable",
+                "dependsOn": [
+                    {
+                        "activity": "RunningTaskStart",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "variableName": "varRunningTask_LogID",
+                    "value": {
+                        "value": "@string(activity('RunningTaskStart').output.firstRow.LogID)",
+                        "type": "Expression"
+                    }
+                }
+            },
+            {
+                "name": "RunningTaskEnd",
+                "type": "Lookup",
+                "dependsOn": [
+                    {
+                        "activity": "Execute _Inner",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.00:00:30",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "source": {
+                        "type": "MariaDBSource",
+                        "query": {
+                            "value": "@concat('CALL management.SP_RunningTaskEnd(''',\n        pipeline().Pipeline,\n        ''',''',\n        variables('varRunningTask_LogID'),\n        ''')')",
+                            "type": "Expression"
+                        }
+                    },
+                    "dataset": {
+                        "referenceName": "DS_MariaDB",
+                        "type": "DatasetReference"
+                    }
+                }
+            },
+            {
+                "name": "RunningTaskError_RTStart",
+                "type": "Lookup",
+                "dependsOn": [
+                    {
+                        "activity": "RunningTaskStart",
+                        "dependencyConditions": [
+                            "Failed"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.00:00:30",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "source": {
+                        "type": "MariaDBSource",
+                        "query": {
+                            "value": "@concat('CALL management.SP_RunningTaskErrorSynapse(''',\n        pipeline().Pipeline,\n        ''',',\n        if(empty(variables('varRunningTask_LogID')),0,variables('varRunningTask_LogID')),\n        ',',\n        '1,',\n        '''Error Data: ', replace(string(activity('RunningTaskStart').error),'''',''''''),'\nPipeline Run ID: ', pipeline().RunId,\n        ''')')",
+                            "type": "Expression"
+                        }
+                    },
+                    "dataset": {
+                        "referenceName": "DS_MariaDB",
+                        "type": "DatasetReference"
+                    }
+                }
+            },
+            {
+                "name": "RunningTaskError_Exec",
+                "type": "Lookup",
+                "dependsOn": [
+                    {
+                        "activity": "Execute _Inner",
+                        "dependencyConditions": [
+                            "Failed"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.00:00:30",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "source": {
+                        "type": "MariaDBSource",
+                        "query": {
+                            "value": "@concat('CALL management.SP_RunningTaskErrorSynapse(''',\n        pipeline().Pipeline,\n        ''',',\n        if(empty(variables('varRunningTask_LogID')),0,variables('varRunningTask_LogID')),\n        ',',\n        '1,',\n        '''Error Data: ', replace(string(activity('Execute _Inner').error),'''',''''''),'\nPipeline Run ID: ', pipeline().RunId, '\nConsult Azure Synapse Monitor for more details.',\n        ''')')",
+                            "type": "Expression"
+                        }
+                    },
+                    "dataset": {
+                        "referenceName": "DS_MariaDB",
+                        "type": "DatasetReference"
+                    }
+                }
+            },
+            {
+                "name": "RunningTaskError_RTEnd",
+                "type": "Lookup",
+                "dependsOn": [
+                    {
+                        "activity": "RunningTaskEnd",
+                        "dependencyConditions": [
+                            "Failed"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.00:00:30",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "source": {
+                        "type": "MariaDBSource",
+                        "query": {
+                            "value": "@concat('CALL management.SP_RunningTaskErrorSynapse(''',\n        pipeline().Pipeline,\n        ''',',\n        if(empty(variables('varRunningTask_LogID')),0,variables('varRunningTask_LogID')),\n        ',',\n        '1,',\n        '''Error Data: ', replace(string(activity('RunningTaskEnd').error),'''',''''''),'\nPipeline Run ID: ', pipeline().RunId,\n        ''')')",
+                            "type": "Expression"
+                        }
+                    },
+                    "dataset": {
+                        "referenceName": "DS_MariaDB",
+                        "type": "DatasetReference"
+                    }
+                }
+            },
+            {
+                "name": "Execute _Inner",
+                "type": "ExecutePipeline",
+                "dependsOn": [
+                    {
+                        "activity": "Set varRunningTask_LogID",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "pipeline": {
+                        "referenceName": "PL_IntgrID_CustomerAsset_M3ToD365_Inner",
+                        "type": "PipelineReference"
+                    },
+                    "waitOnCompletion": true,
+                    "parameters": {
+                        "sftpPath": {
+                            "value": "@pipeline().parameters.sftpPath",
+                            "type": "Expression"
+                        },
+                        "ProcessedPath": {
+                            "value": "@pipeline().parameters.ProcessedPath",
+                            "type": "Expression"
+                        },
+                        "ErrorPath": {
+                            "value": "@pipeline().parameters.ErrorPath",
+                            "type": "Expression"
+                        },
+                        "EntityName": {
+                            "value": "@pipeline().parameters.EntityName",
+                            "type": "Expression"
+                        },
+                        "adlsContainerName": {
+                            "value": "@pipeline().parameters.adlsContainerName",
+                            "type": "Expression"
+                        },
+                        "adlsProcessFilesPath": {
+                            "value": "@pipeline().parameters.adlsProcessFilesPath",
+                            "type": "Expression"
+                        },
+                        "RunningTask_LogID": {
+                            "value": "@variables('varRunningTask_LogID')",
+                            "type": "Expression"
+                        },
+                        "RunningTask_TaskName": {
+                            "value": "@pipeline().Pipeline",
+                            "type": "Expression"
+                        }
+                    }
+                }
+            }
+        ],
+        "parameters": {
+            "sftpPath": {
+                "type": "string",
+                "defaultValue": "SyncInforToAzure/"
+            },
+            "ProcessedPath": {
+                "type": "string",
+                "defaultValue": "Archive/"
+            },
+            "ErrorPath": {
+                "type": "string",
+                "defaultValue": "Error/"
+            },
+            "EntityName": {
+                "type": "string",
+                "defaultValue": "CustomerAsset"
+            },
+            "adlsContainerName": {
+                "type": "string",
+                "defaultValue": "integration"
+            },
+            "adlsProcessFilesPath": {
+                "type": "string",
+                "defaultValue": "ToD365/Landing/"
+            }
+        },
+        "variables": {
+            "varProcessDateTime": {
+                "type": "String"
+            },
+            "varFilePath": {
+                "type": "String"
+            },
+            "varProcessedFilesPath": {
+                "type": "String"
+            },
+            "varListFileName": {
+                "type": "String"
+            },
+            "varRunningTask_LogID": {
+                "type": "String"
+            },
+            "varErrorMsg": {
+                "type": "String"
+            },
+            "varSPCall": {
+                "type": "String"
+            },
+            "varWarningManualUpdateFileName": {
+                "type": "String"
+            }
+        },
+        "folder": {
+            "name": "Integration Infor-D365"
+        },
+        "annotations": [],
+        "lastPublishTime": "2024-08-12T14:36:51Z"
+    },
+    "type": "Microsoft.DataFactory/factories/pipelines"
+}

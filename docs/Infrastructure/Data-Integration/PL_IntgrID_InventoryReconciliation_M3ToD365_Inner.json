@@ -1,0 +1,283 @@
+{
+    "name": "PL_IntgrID_InventoryReconciliation_M3ToD365_Inner",
+    "properties": {
+        "activities": [
+            {
+                "name": "If Active Warehouses Found",
+                "description": "",
+                "type": "IfCondition",
+                "dependsOn": [
+                    {
+                        "activity": "Get ActiveWarehouse",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "userProperties": [],
+                "typeProperties": {
+                    "expression": {
+                        "value": "@greater(activity('Get ActiveWarehouse').output.count, 0)",
+                        "type": "Expression"
+                    },
+                    "ifTrueActivities": [
+                        {
+                            "name": "Get InforAPI BaseURL",
+                            "type": "Lookup",
+                            "dependsOn": [
+                                {
+                                    "activity": "Set varBearerToken",
+                                    "dependencyConditions": [
+                                        "Succeeded"
+                                    ]
+                                }
+                            ],
+                            "policy": {
+                                "timeout": "0.00:00:30",
+                                "retry": 0,
+                                "retryIntervalInSeconds": 30,
+                                "secureOutput": false,
+                                "secureInput": false
+                            },
+                            "userProperties": [],
+                            "typeProperties": {
+                                "source": {
+                                    "type": "DynamicsSource",
+                                    "query": "<fetch version=\"1.0\" output-format=\"xml-platform\" mapping=\"logical\" distinct=\"false\">\n  <entity name=\"ava_parameter\">\n    <attribute name=\"ava_value\" />\n    <order attribute=\"ava_name\" descending=\"false\" />\n    <filter type=\"and\">\n      <condition attribute=\"ava_name\" operator=\"eq\" value=\"InforAPIBaseURL\" />\n      <condition attribute=\"statecode\" operator=\"eq\" value=\"0\" />\n    </filter>\n  </entity>\n</fetch>"
+                                },
+                                "dataset": {
+                                    "referenceName": "DS_D365_ParametersSMGS",
+                                    "type": "DatasetReference"
+                                },
+                                "firstRowOnly": true
+                            }
+                        },
+                        {
+                            "name": "Set varInforAPIBaseURL",
+                            "type": "SetVariable",
+                            "dependsOn": [
+                                {
+                                    "activity": "Get InforAPI BaseURL",
+                                    "dependencyConditions": [
+                                        "Succeeded"
+                                    ]
+                                }
+                            ],
+                            "policy": {
+                                "secureOutput": false,
+                                "secureInput": false
+                            },
+                            "userProperties": [],
+                            "typeProperties": {
+                                "variableName": "varInforAPIBaseURL",
+                                "value": {
+                                    "value": "@activity('Get InforAPI BaseURL').output.firstRow.ava_value",
+                                    "type": "Expression"
+                                }
+                            }
+                        },
+                        {
+                            "name": "PL_InforUtil_BearerTokenToAKV",
+                            "type": "ExecutePipeline",
+                            "dependsOn": [],
+                            "policy": {
+                                "secureInput": false
+                            },
+                            "userProperties": [],
+                            "typeProperties": {
+                                "pipeline": {
+                                    "referenceName": "PL_InforUtil_BearerTokenToAKV",
+                                    "type": "PipelineReference"
+                                },
+                                "waitOnCompletion": true,
+                                "parameters": {
+                                    "paramForceGenNewToken": {
+                                        "value": "@pipeline().parameters.ForceRenewInforApiBearerToken",
+                                        "type": "Expression"
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            "name": "GetBearerTokenFromAKV",
+                            "type": "WebActivity",
+                            "dependsOn": [
+                                {
+                                    "activity": "PL_InforUtil_BearerTokenToAKV",
+                                    "dependencyConditions": [
+                                        "Succeeded"
+                                    ]
+                                }
+                            ],
+                            "policy": {
+                                "timeout": "0.0:01:00",
+                                "retry": 0,
+                                "retryIntervalInSeconds": 30,
+                                "secureOutput": true,
+                                "secureInput": false
+                            },
+                            "userProperties": [],
+                            "typeProperties": {
+                                "method": "GET",
+                                "url": {
+                                    "value": "@concat(pipeline().globalParameters.AzureKeyVaultURL,'/secrets/InforAPI-BearerToken-Value/?api-version=7.0')",
+                                    "type": "Expression"
+                                },
+                                "authentication": {
+                                    "type": "MSI",
+                                    "resource": "https://vault.azure.net"
+                                }
+                            }
+                        },
+                        {
+                            "name": "Set varBearerToken",
+                            "type": "SetVariable",
+                            "dependsOn": [
+                                {
+                                    "activity": "GetBearerTokenFromAKV",
+                                    "dependencyConditions": [
+                                        "Succeeded"
+                                    ]
+                                }
+                            ],
+                            "policy": {
+                                "secureOutput": false,
+                                "secureInput": false
+                            },
+                            "userProperties": [],
+                            "typeProperties": {
+                                "variableName": "varBearerToken",
+                                "value": {
+                                    "value": "Bearer @{activity('GetBearerTokenFromAKV').output.value}",
+                                    "type": "Expression"
+                                }
+                            }
+                        }
+                    ]
+                }
+            },
+            {
+                "name": "Get ActiveWarehouse",
+                "type": "Lookup",
+                "dependsOn": [],
+                "policy": {
+                    "timeout": "0.00:01:00",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "source": {
+                        "type": "DynamicsSource",
+                        "query": {
+                            "value": "@concat('<fetch version=\"1.0\" output-format=\"xml-platform\" mapping=\"logical\" distinct=\"false\"><entity name=\"msdyn_warehouse\"><attribute name=\"ava_warehouseinforid\"/><order attribute=\"ava_warehouseinforid\" descending=\"false\"/><filter type=\"and\"><condition attribute=\"ava_warehouseinforid\" operator=\"',if(empty(pipeline().parameters.Warehouse),'like','eq') ,'\" value=\"',if(empty(pipeline().parameters.Warehouse),'T%',pipeline().parameters.Warehouse) ,'\"/><condition attribute=\"statecode\" operator=\"eq\" value=\"0\"/></filter></entity></fetch>')",
+                            "type": "Expression"
+                        }
+                    },
+                    "dataset": {
+                        "referenceName": "DS_D365_NationalGroup",
+                        "type": "DatasetReference"
+                    },
+                    "firstRowOnly": false
+                }
+            },
+            {
+                "name": "ForEach Warehouse",
+                "type": "ForEach",
+                "dependsOn": [
+                    {
+                        "activity": "If Active Warehouses Found",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "userProperties": [],
+                "typeProperties": {
+                    "items": {
+                        "value": "@activity('Get ActiveWarehouse').output.value",
+                        "type": "Expression"
+                    },
+                    "isSequential": true,
+                    "activities": [
+                        {
+                            "name": "DF_D365_InventoryReconciliation",
+                            "type": "ExecuteDataFlow",
+                            "dependsOn": [],
+                            "policy": {
+                                "timeout": "0.00:15:00",
+                                "retry": 0,
+                                "retryIntervalInSeconds": 30,
+                                "secureOutput": false,
+                                "secureInput": false
+                            },
+                            "userProperties": [],
+                            "typeProperties": {
+                                "dataflow": {
+                                    "referenceName": "DF_D365_InventoryReconciliation",
+                                    "type": "DataFlowReference",
+                                    "parameters": {
+                                        "df_Warehouse": {
+                                            "value": "'@{item().ava_warehouseinforid}'",
+                                            "type": "Expression"
+                                        },
+                                        "df_BearerToken": {
+                                            "value": "'@{variables('varBearerToken')}'",
+                                            "type": "Expression"
+                                        }
+                                    },
+                                    "datasetParameters": {
+                                        "M3WarehouseProductInventory": {
+                                            "APIUrl": {
+                                                "value": "@concat(variables('varInforAPIBaseURL'),\n        'M3/m3api-rest/v2/execute/MMS060MI/LstBalID?', \n        'CONO=',pipeline().globalParameters.InforCompanyNumber, \n        '&WHLO=',item().ava_warehouseinforid,\n        '&maxrecs=0')",
+                                                "type": "Expression"
+                                            }
+                                        }
+                                    }
+                                },
+                                "compute": {
+                                    "coreCount": 8,
+                                    "computeType": "General"
+                                },
+                                "traceLevel": "Fine"
+                            }
+                        }
+                    ]
+                }
+            }
+        ],
+        "parameters": {
+            "ForceRenewInforApiBearerToken": {
+                "type": "bool",
+                "defaultValue": false
+            },
+            "RunningTask_LogID": {
+                "type": "string",
+                "defaultValue": "0"
+            },
+            "RunningTask_TaskName": {
+                "type": "string",
+                "defaultValue": "PL_IntgrID_InventoryReconciliation_M3ToD365"
+            },
+            "Warehouse": {
+                "type": "string"
+            }
+        },
+        "variables": {
+            "varBearerToken": {
+                "type": "String"
+            },
+            "varInforAPIBaseURL": {
+                "type": "String"
+            }
+        },
+        "folder": {
+            "name": "Integration Infor-D365"
+        },
+        "annotations": [],
+        "lastPublishTime": "2024-08-12T14:36:47Z"
+    },
+    "type": "Microsoft.DataFactory/factories/pipelines"
+}

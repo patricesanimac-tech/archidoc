@@ -1,0 +1,258 @@
+{
+    "name": "PL_IntgrID_AccountCreationTrg_D365ToM3",
+    "properties": {
+        "activities": [
+            {
+                "name": "RunningTaskStart",
+                "type": "Lookup",
+                "dependsOn": [],
+                "policy": {
+                    "timeout": "0.00:00:30",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "source": {
+                        "type": "MariaDBSource",
+                        "query": {
+                            "value": "@concat('CALL management.SP_RunningTaskStart(''',\n        pipeline().Pipeline,\n        ''',''0'')')",
+                            "type": "Expression"
+                        }
+                    },
+                    "dataset": {
+                        "referenceName": "DS_MariaDB",
+                        "type": "DatasetReference"
+                    }
+                }
+            },
+            {
+                "name": "RunningTaskEnd",
+                "type": "Lookup",
+                "dependsOn": [
+                    {
+                        "activity": "Execute _Inner",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.00:00:30",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "source": {
+                        "type": "MariaDBSource",
+                        "query": {
+                            "value": "@concat('CALL management.SP_RunningTaskEnd(''',\n        pipeline().Pipeline,\n        ''',''',\n        variables('varRunningTask_LogID'),\n        ''')')",
+                            "type": "Expression"
+                        }
+                    },
+                    "dataset": {
+                        "referenceName": "DS_MariaDB",
+                        "type": "DatasetReference"
+                    }
+                }
+            },
+            {
+                "name": "Execute _Inner",
+                "type": "ExecutePipeline",
+                "dependsOn": [
+                    {
+                        "activity": "Set varRunningTask_LogID",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "pipeline": {
+                        "referenceName": "PL_IntgrID_AccountCreationTrg_D365ToM3_Inner",
+                        "type": "PipelineReference"
+                    },
+                    "waitOnCompletion": true,
+                    "parameters": {
+                        "ForceRenewInforApiBearerToken": {
+                            "value": "@pipeline().parameters.ForceRenewInforApiBearerToken",
+                            "type": "Expression"
+                        },
+                        "RunningTask_LogID": {
+                            "value": "@variables('varRunningTask_LogID')",
+                            "type": "Expression"
+                        },
+                        "RunningTask_TaskName": {
+                            "value": "@pipeline().Pipeline",
+                            "type": "Expression"
+                        },
+                        "CustomerStage_SyncProcessing": {
+                            "value": "@pipeline().parameters.CustomerStage_SyncProcessing",
+                            "type": "Expression"
+                        },
+                        "M3AccountNumber": {
+                            "value": "@pipeline().parameters.M3AccountNumber",
+                            "type": "Expression"
+                        }
+                    }
+                }
+            },
+            {
+                "name": "Set varRunningTask_LogID",
+                "type": "SetVariable",
+                "dependsOn": [
+                    {
+                        "activity": "RunningTaskStart",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "variableName": "varRunningTask_LogID",
+                    "value": {
+                        "value": "@string(activity('RunningTaskStart').output.firstRow.LogID)",
+                        "type": "Expression"
+                    }
+                }
+            },
+            {
+                "name": "RunningTaskError_RTStart",
+                "type": "Lookup",
+                "dependsOn": [
+                    {
+                        "activity": "RunningTaskStart",
+                        "dependencyConditions": [
+                            "Failed"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.00:00:30",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "source": {
+                        "type": "MariaDBSource",
+                        "query": {
+                            "value": "@concat('CALL management.SP_RunningTaskErrorSynapse(''',\n        pipeline().Pipeline,\n        ''',',\n        if(empty(variables('varRunningTask_LogID')),0,variables('varRunningTask_LogID')),\n        ',',\n        '1,',\n        '''Error Data: ', replace(string(activity('RunningTaskStart').error),'''',''''''),'\nPipeline Run ID: ', pipeline().RunId,\n        ''')')",
+                            "type": "Expression"
+                        }
+                    },
+                    "dataset": {
+                        "referenceName": "DS_MariaDB",
+                        "type": "DatasetReference"
+                    }
+                }
+            },
+            {
+                "name": "RunningTaskError_Exec",
+                "type": "Lookup",
+                "dependsOn": [
+                    {
+                        "activity": "Execute _Inner",
+                        "dependencyConditions": [
+                            "Failed"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.00:00:30",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "source": {
+                        "type": "MariaDBSource",
+                        "query": {
+                            "value": "@concat('CALL management.SP_RunningTaskErrorSynapse(''',\n        pipeline().Pipeline,\n        ''',',\n        if(empty(variables('varRunningTask_LogID')),0,variables('varRunningTask_LogID')),\n        ',',\n        '1,',\n        '''Error Data: ', replace(string(activity('Execute _Inner').error),'''',''''''),'\nPipeline Run ID: ', pipeline().RunId, '\nConsult Azure Synapse Monitor for more details.',\n        ''')')",
+                            "type": "Expression"
+                        }
+                    },
+                    "dataset": {
+                        "referenceName": "DS_MariaDB",
+                        "type": "DatasetReference"
+                    }
+                }
+            },
+            {
+                "name": "RunningTaskError_RTEnd",
+                "type": "Lookup",
+                "dependsOn": [
+                    {
+                        "activity": "RunningTaskEnd",
+                        "dependencyConditions": [
+                            "Failed"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.00:00:30",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "source": {
+                        "type": "MariaDBSource",
+                        "query": {
+                            "value": "@concat('CALL management.SP_RunningTaskErrorSynapse(''',\n        pipeline().Pipeline,\n        ''',',\n        if(empty(variables('varRunningTask_LogID')),0,variables('varRunningTask_LogID')),\n        ',',\n        '1,',\n        '''Error Data: ', replace(string(activity('RunningTaskEnd').error),'''',''''''),'\nPipeline Run ID: ', pipeline().RunId,\n        ''')')",
+                            "type": "Expression"
+                        }
+                    },
+                    "dataset": {
+                        "referenceName": "DS_MariaDB",
+                        "type": "DatasetReference"
+                    }
+                }
+            }
+        ],
+        "parameters": {
+            "ForceRenewInforApiBearerToken": {
+                "type": "bool",
+                "defaultValue": false
+            },
+            "CustomerStage_SyncProcessing": {
+                "type": "string",
+                "defaultValue": "50"
+            },
+            "M3AccountNumber": {
+                "type": "string"
+            }
+        },
+        "variables": {
+            "varRunningTask_LogID": {
+                "type": "String"
+            }
+        },
+        "folder": {
+            "name": "Integration Infor-D365"
+        },
+        "annotations": [],
+        "lastPublishTime": "2024-08-12T14:36:49Z"
+    },
+    "type": "Microsoft.DataFactory/factories/pipelines"
+}

@@ -1,0 +1,1783 @@
+{
+    "name": "PL_IntgrID_Account_M3ToD365_Inner",
+    "properties": {
+        "activities": [
+            {
+                "name": "Set varProcessDateTime",
+                "type": "SetVariable",
+                "dependsOn": [],
+                "policy": {
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "variableName": "varProcessDateTime",
+                    "value": {
+                        "value": "@convertFromUtc(utcNow(),'Eastern Standard Time','yyyyMMddTHHmmss')",
+                        "type": "Expression"
+                    }
+                }
+            },
+            {
+                "name": "Merge json files",
+                "description": "Need to have exactly the number on files required to do the merge.",
+                "type": "IfCondition",
+                "dependsOn": [
+                    {
+                        "activity": "FullLoad Validation",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "userProperties": [],
+                "typeProperties": {
+                    "expression": {
+                        "value": "@empty(variables('varError'))",
+                        "type": "Expression"
+                    },
+                    "ifFalseActivities": [
+                        {
+                            "name": "Error Occured",
+                            "type": "Fail",
+                            "dependsOn": [],
+                            "userProperties": [],
+                            "typeProperties": {
+                                "message": {
+                                    "value": "@variables('varError')",
+                                    "type": "Expression"
+                                },
+                                "errorCode": "500"
+                            }
+                        }
+                    ],
+                    "ifTrueActivities": [
+                        {
+                            "name": "Set varMergeFileName",
+                            "type": "SetVariable",
+                            "dependsOn": [],
+                            "policy": {
+                                "secureOutput": false,
+                                "secureInput": false
+                            },
+                            "userProperties": [],
+                            "typeProperties": {
+                                "variableName": "varMergeFileName",
+                                "value": {
+                                    "value": "@concat(pipeline().parameters.EntityName, 'Merge_',\n        variables('varProcessDateTime'), '.json')",
+                                    "type": "Expression"
+                                }
+                            }
+                        },
+                        {
+                            "name": "Merge files",
+                            "type": "Copy",
+                            "dependsOn": [
+                                {
+                                    "activity": "Set varMergeFileName",
+                                    "dependencyConditions": [
+                                        "Succeeded"
+                                    ]
+                                }
+                            ],
+                            "policy": {
+                                "timeout": "0.12:00:00",
+                                "retry": 0,
+                                "retryIntervalInSeconds": 30,
+                                "secureOutput": false,
+                                "secureInput": false
+                            },
+                            "userProperties": [],
+                            "typeProperties": {
+                                "source": {
+                                    "type": "JsonSource",
+                                    "additionalColumns": [
+                                        {
+                                            "name": "FileName",
+                                            "value": "$$FILEPATH"
+                                        }
+                                    ],
+                                    "storeSettings": {
+                                        "type": "SftpReadSettings",
+                                        "recursive": true,
+                                        "wildcardFileName": "*.json",
+                                        "enablePartitionDiscovery": false,
+                                        "disableChunking": false
+                                    },
+                                    "formatSettings": {
+                                        "type": "JsonReadSettings"
+                                    }
+                                },
+                                "sink": {
+                                    "type": "JsonSink",
+                                    "storeSettings": {
+                                        "type": "SftpWriteSettings",
+                                        "copyBehavior": "MergeFiles",
+                                        "operationTimeout": "01:00:00",
+                                        "useTempFileRename": true
+                                    },
+                                    "formatSettings": {
+                                        "type": "JsonWriteSettings"
+                                    }
+                                },
+                                "enableStaging": false,
+                                "translator": {
+                                    "type": "TabularTranslator",
+                                    "mappings": [
+                                        {
+                                            "source": {
+                                                "path": "$['Action']"
+                                            },
+                                            "sink": {
+                                                "path": "$['Action']"
+                                            }
+                                        },
+                                        {
+                                            "source": {
+                                                "path": "$['AccountNumber']"
+                                            },
+                                            "sink": {
+                                                "path": "$['AccountNumber']"
+                                            }
+                                        },
+                                        {
+                                            "source": {
+                                                "path": "$['CustomerName']"
+                                            },
+                                            "sink": {
+                                                "path": "$['CustomerName']"
+                                            }
+                                        },
+                                        {
+                                            "source": {
+                                                "path": "$['M3Status']"
+                                            },
+                                            "sink": {
+                                                "path": "$['M3Status']"
+                                            }
+                                        },
+                                        {
+                                            "source": {
+                                                "path": "$['BillTo']"
+                                            },
+                                            "sink": {
+                                                "path": "$['BillTo']"
+                                            }
+                                        },
+                                        {
+                                            "source": {
+                                                "path": "$['Street1']"
+                                            },
+                                            "sink": {
+                                                "path": "$['Street1']"
+                                            }
+                                        },
+                                        {
+                                            "source": {
+                                                "path": "$['Street2']"
+                                            },
+                                            "sink": {
+                                                "path": "$['Street2']"
+                                            }
+                                        },
+                                        {
+                                            "source": {
+                                                "path": "$['City']"
+                                            },
+                                            "sink": {
+                                                "path": "$['City']"
+                                            }
+                                        },
+                                        {
+                                            "source": {
+                                                "path": "$['State']"
+                                            },
+                                            "sink": {
+                                                "path": "$['State']"
+                                            }
+                                        },
+                                        {
+                                            "source": {
+                                                "path": "$['PostalCode']"
+                                            },
+                                            "sink": {
+                                                "path": "$['PostalCode']"
+                                            }
+                                        },
+                                        {
+                                            "source": {
+                                                "path": "$['Country']"
+                                            },
+                                            "sink": {
+                                                "path": "$['Country']"
+                                            }
+                                        },
+                                        {
+                                            "source": {
+                                                "path": "$['Phone']"
+                                            },
+                                            "sink": {
+                                                "path": "$['Phone']"
+                                            }
+                                        },
+                                        {
+                                            "source": {
+                                                "path": "$['Extension']"
+                                            },
+                                            "sink": {
+                                                "path": "$['Extension']"
+                                            }
+                                        },
+                                        {
+                                            "source": {
+                                                "path": "$['Fax']"
+                                            },
+                                            "sink": {
+                                                "path": "$['Fax']"
+                                            }
+                                        },
+                                        {
+                                            "source": {
+                                                "path": "$['PrimaryMarket']"
+                                            },
+                                            "sink": {
+                                                "path": "$['PrimaryMarket']"
+                                            }
+                                        },
+                                        {
+                                            "source": {
+                                                "path": "$['SecondaryMarket']"
+                                            },
+                                            "sink": {
+                                                "path": "$['SecondaryMarket']"
+                                            }
+                                        },
+                                        {
+                                            "source": {
+                                                "path": "$['PurchasingGroup']"
+                                            },
+                                            "sink": {
+                                                "path": "$['PurchasingGroup']"
+                                            }
+                                        },
+                                        {
+                                            "source": {
+                                                "path": "$['AdditionalPurchasingGroup']"
+                                            },
+                                            "sink": {
+                                                "path": "$['AdditionalPurchasingGroup']"
+                                            }
+                                        },
+                                        {
+                                            "source": {
+                                                "path": "$['NationalGroup']"
+                                            },
+                                            "sink": {
+                                                "path": "$['NationalGroup']"
+                                            }
+                                        },
+                                        {
+                                            "source": {
+                                                "path": "$['Manager']"
+                                            },
+                                            "sink": {
+                                                "path": "$['Manager']"
+                                            }
+                                        },
+                                        {
+                                            "source": {
+                                                "path": "$['Language']"
+                                            },
+                                            "sink": {
+                                                "path": "$['Language']"
+                                            }
+                                        },
+                                        {
+                                            "source": {
+                                                "path": "$['Kosher']"
+                                            },
+                                            "sink": {
+                                                "path": "$['Kosher']"
+                                            }
+                                        },
+                                        {
+                                            "source": {
+                                                "path": "$['StoreNumber']"
+                                            },
+                                            "sink": {
+                                                "path": "$['StoreNumber']"
+                                            }
+                                        },
+                                        {
+                                            "source": {
+                                                "path": "$['TaxExemption']"
+                                            },
+                                            "sink": {
+                                                "path": "$['TaxExemption']"
+                                            }
+                                        },
+                                        {
+                                            "source": {
+                                                "path": "$['TPS']"
+                                            },
+                                            "sink": {
+                                                "path": "$['TPS']"
+                                            }
+                                        },
+                                        {
+                                            "source": {
+                                                "path": "$['TVP']"
+                                            },
+                                            "sink": {
+                                                "path": "$['TVP']"
+                                            }
+                                        },
+                                        {
+                                            "source": {
+                                                "path": "$['CreditLimit']"
+                                            },
+                                            "sink": {
+                                                "path": "$['CreditLimit']"
+                                            }
+                                        },
+                                        {
+                                            "source": {
+                                                "path": "$['OutstandingAmount']"
+                                            },
+                                            "sink": {
+                                                "path": "$['OutstandingAmount']"
+                                            }
+                                        },
+                                        {
+                                            "source": {
+                                                "path": "$['HardBlock']"
+                                            },
+                                            "sink": {
+                                                "path": "$['HardBlock']"
+                                            }
+                                        },
+                                        {
+                                            "source": {
+                                                "path": "$['PaymentTerm']"
+                                            },
+                                            "sink": {
+                                                "path": "$['PaymentTerm']"
+                                            }
+                                        },
+                                        {
+                                            "source": {
+                                                "path": "$['Warehouse']"
+                                            },
+                                            "sink": {
+                                                "path": "$['Warehouse']"
+                                            }
+                                        },
+                                        {
+                                            "source": {
+                                                "path": "$['DivCompAramark']"
+                                            },
+                                            "sink": {
+                                                "path": "$['DivCompAramark']"
+                                            }
+                                        },
+                                        {
+                                            "source": {
+                                                "path": "$['FileName']"
+                                            },
+                                            "sink": {
+                                                "path": "$['FileName']"
+                                            }
+                                        }
+                                    ]
+                                }
+                            },
+                            "inputs": [
+                                {
+                                    "referenceName": "DS_SFTP_FilePath",
+                                    "type": "DatasetReference",
+                                    "parameters": {
+                                        "ds_filePath": {
+                                            "value": "@variables('varFilePath')",
+                                            "type": "Expression"
+                                        }
+                                    }
+                                }
+                            ],
+                            "outputs": [
+                                {
+                                    "referenceName": "DS_SFTP_Filename",
+                                    "type": "DatasetReference",
+                                    "parameters": {
+                                        "ds_filePath": {
+                                            "value": "@variables('varFilePath')",
+                                            "type": "Expression"
+                                        },
+                                        "ds_fileName": {
+                                            "value": "@variables('varMergeFileName')",
+                                            "type": "Expression"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    ]
+                }
+            },
+            {
+                "name": "FullLoad Validation",
+                "type": "IfCondition",
+                "dependsOn": [
+                    {
+                        "activity": "Set varFilePath",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "userProperties": [],
+                "typeProperties": {
+                    "expression": {
+                        "value": "@pipeline().parameters.isFullLoad",
+                        "type": "Expression"
+                    },
+                    "ifTrueActivities": [
+                        {
+                            "name": "Get FullLoad Files",
+                            "type": "GetMetadata",
+                            "dependsOn": [],
+                            "policy": {
+                                "timeout": "0.00:05:00",
+                                "retry": 0,
+                                "retryIntervalInSeconds": 30,
+                                "secureOutput": false,
+                                "secureInput": false
+                            },
+                            "userProperties": [],
+                            "typeProperties": {
+                                "dataset": {
+                                    "referenceName": "DS_SFTP_FilePath",
+                                    "type": "DatasetReference",
+                                    "parameters": {
+                                        "ds_filePath": {
+                                            "value": "@variables('varFilePath')",
+                                            "type": "Expression"
+                                        }
+                                    }
+                                },
+                                "fieldList": [
+                                    "childItems",
+                                    "exists"
+                                ],
+                                "storeSettings": {
+                                    "type": "SftpReadSettings",
+                                    "recursive": true,
+                                    "enablePartitionDiscovery": false,
+                                    "disableChunking": false
+                                },
+                                "formatSettings": {
+                                    "type": "JsonReadSettings"
+                                }
+                            }
+                        },
+                        {
+                            "name": "Keep Only JSON Files",
+                            "type": "Filter",
+                            "dependsOn": [
+                                {
+                                    "activity": "Get FullLoad Files",
+                                    "dependencyConditions": [
+                                        "Succeeded"
+                                    ]
+                                }
+                            ],
+                            "userProperties": [],
+                            "typeProperties": {
+                                "items": {
+                                    "value": "@activity('Get FullLoad Files').output.childItems",
+                                    "type": "Expression"
+                                },
+                                "condition": {
+                                    "value": "@endswith(toLower(item().name),'.json')",
+                                    "type": "Expression"
+                                }
+                            }
+                        },
+                        {
+                            "name": "Set varError",
+                            "type": "SetVariable",
+                            "dependsOn": [
+                                {
+                                    "activity": "Keep Only JSON Files",
+                                    "dependencyConditions": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                {
+                                    "activity": "Get NbrAccountsNotSync",
+                                    "dependencyConditions": [
+                                        "Succeeded"
+                                    ]
+                                }
+                            ],
+                            "policy": {
+                                "secureOutput": false,
+                                "secureInput": false
+                            },
+                            "userProperties": [],
+                            "typeProperties": {
+                                "variableName": "varError",
+                                "value": {
+                                    "value": "@concat(if(equals(activity('Get NbrAccountsNotSync').output.results[0].records[0].REPL,'0'),\n           '',\n           concat(activity('Get NbrAccountsNotSync').output.results[0].records[0].REPL, ' accounts in M3 are out of range for this process. Please, configure a new MBM initiator from MNS260 in M3 for Accounts ',\n           pipeline().parameters.AccountsNotSyncMinRangeNbr,\n           ' to ',\n           string(add(int(pipeline().parameters.AccountsNotSyncMinRangeNbr), 4999)),' (Do not forget to update the parameters value for this validation).')\n          ),\n        if(equals(activity('Keep Only JSON Files').output.FilteredItemsCount,pipeline().parameters.FullLoadNbrFilesRequired),\n           '',\n           concat(if(equals(activity('Get NbrAccountsNotSync').output.results[0].records[0].REPL,'0'),'',' | '),\n                  'The number of FullLoad files mismatch (',\n                  string(activity('Keep Only JSON Files').output.FilteredItemsCount),\n                  '/',\n                  string(pipeline().parameters.FullLoadNbrFilesRequired),\n                  ').')\n          )\n       )",
+                                    "type": "Expression"
+                                }
+                            }
+                        },
+                        {
+                            "name": "PL_InforUtil_BearerTokenToAKV",
+                            "type": "ExecutePipeline",
+                            "dependsOn": [],
+                            "policy": {
+                                "secureInput": false
+                            },
+                            "userProperties": [],
+                            "typeProperties": {
+                                "pipeline": {
+                                    "referenceName": "PL_InforUtil_BearerTokenToAKV",
+                                    "type": "PipelineReference"
+                                },
+                                "waitOnCompletion": true,
+                                "parameters": {
+                                    "paramForceGenNewToken": {
+                                        "value": "@pipeline().parameters.ForceRenewInforApiBearerToken",
+                                        "type": "Expression"
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            "name": "GetBearerTokenFromAKV",
+                            "type": "WebActivity",
+                            "dependsOn": [
+                                {
+                                    "activity": "PL_InforUtil_BearerTokenToAKV",
+                                    "dependencyConditions": [
+                                        "Succeeded"
+                                    ]
+                                }
+                            ],
+                            "policy": {
+                                "timeout": "0.0:01:00",
+                                "retry": 0,
+                                "retryIntervalInSeconds": 30,
+                                "secureOutput": false,
+                                "secureInput": false
+                            },
+                            "userProperties": [],
+                            "typeProperties": {
+                                "method": "GET",
+                                "url": {
+                                    "value": "@concat(pipeline().globalParameters.AzureKEyVaultURL,'/secrets/InforAPI-BearerToken-Value/?api-version=7.0')",
+                                    "type": "Expression"
+                                },
+                                "authentication": {
+                                    "type": "MSI",
+                                    "resource": " https://vault.azure.net"
+                                }
+                            }
+                        },
+                        {
+                            "name": "Get NbrAccountsNotSync",
+                            "type": "WebActivity",
+                            "dependsOn": [
+                                {
+                                    "activity": "Set varInforAPIBaseURL",
+                                    "dependencyConditions": [
+                                        "Succeeded"
+                                    ]
+                                }
+                            ],
+                            "policy": {
+                                "timeout": "0.12:00:00",
+                                "retry": 0,
+                                "retryIntervalInSeconds": 30,
+                                "secureOutput": false,
+                                "secureInput": false
+                            },
+                            "userProperties": [],
+                            "typeProperties": {
+                                "method": "GET",
+                                "headers": {
+                                    "Authorization": {
+                                        "value": "Bearer @{activity('GetBearerTokenFromAKV').output.value}",
+                                        "type": "Expression"
+                                    }
+                                },
+                                "url": {
+                                    "value": "@concat(variables('varInforAPIBaseURL'),\n        'M3/m3api-rest/v2/execute/EXPORTMI/SelectPad?SEPC=|&HDRS=0&QERY=count(*) from OCUSMA where OKCONO = ',pipeline().globalParameters.InforCompanyNumber,' AND OKCUNO >= ''',\n         pipeline().parameters.AccountsNotSyncMinRangeNbr,\n         ''' AND OKCUNO < ''',\n         pipeline().parameters.AccountsNotSyncMaxRangeNbr,\n         '''&maxrecs=0')",
+                                    "type": "Expression"
+                                }
+                            }
+                        },
+                        {
+                            "name": "Get InforAPI BaseURL",
+                            "type": "Lookup",
+                            "dependsOn": [
+                                {
+                                    "activity": "GetBearerTokenFromAKV",
+                                    "dependencyConditions": [
+                                        "Succeeded"
+                                    ]
+                                }
+                            ],
+                            "policy": {
+                                "timeout": "0.00:00:30",
+                                "retry": 0,
+                                "retryIntervalInSeconds": 30,
+                                "secureOutput": false,
+                                "secureInput": false
+                            },
+                            "userProperties": [],
+                            "typeProperties": {
+                                "source": {
+                                    "type": "DynamicsSource",
+                                    "query": "<fetch version=\"1.0\" output-format=\"xml-platform\" mapping=\"logical\" distinct=\"false\">\n  <entity name=\"ava_parameter\">\n    <attribute name=\"ava_value\" />\n    <order attribute=\"ava_name\" descending=\"false\" />\n    <filter type=\"and\">\n      <condition attribute=\"ava_name\" operator=\"eq\" value=\"InforAPIBaseURL\" />\n      <condition attribute=\"statecode\" operator=\"eq\" value=\"0\" />\n    </filter>\n  </entity>\n</fetch>"
+                                },
+                                "dataset": {
+                                    "referenceName": "DS_D365_ParametersSMGS",
+                                    "type": "DatasetReference"
+                                },
+                                "firstRowOnly": true
+                            }
+                        },
+                        {
+                            "name": "Set varInforAPIBaseURL",
+                            "type": "SetVariable",
+                            "dependsOn": [
+                                {
+                                    "activity": "Get InforAPI BaseURL",
+                                    "dependencyConditions": [
+                                        "Succeeded"
+                                    ]
+                                }
+                            ],
+                            "policy": {
+                                "secureOutput": false,
+                                "secureInput": false
+                            },
+                            "userProperties": [],
+                            "typeProperties": {
+                                "variableName": "varInforAPIBaseURL",
+                                "value": {
+                                    "value": "@activity('Get InforAPI BaseURL').output.firstRow.ava_value",
+                                    "type": "Expression"
+                                }
+                            }
+                        }
+                    ]
+                }
+            },
+            {
+                "name": "Set varFilePath",
+                "type": "SetVariable",
+                "dependsOn": [
+                    {
+                        "activity": "Set varSyncType",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "variableName": "varFilePath",
+                    "value": {
+                        "value": "@concat(pipeline().parameters.sftpPath,\n        pipeline().parameters.EntityName, '_',\n        variables('varSyncType'), '/')",
+                        "type": "Expression"
+                    }
+                }
+            },
+            {
+                "name": "Set varSyncType",
+                "type": "SetVariable",
+                "dependsOn": [
+                    {
+                        "activity": "Set varProcessDateTime",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "variableName": "varSyncType",
+                    "value": {
+                        "value": "@if(pipeline().parameters.isFullLoad,\n    pipeline().parameters.FullLoadPath,\n    pipeline().parameters.SyncPath)",
+                        "type": "Expression"
+                    }
+                }
+            },
+            {
+                "name": "Copy file to Error folder",
+                "type": "Copy",
+                "dependsOn": [
+                    {
+                        "activity": "RunningTaskError_DFAccount",
+                        "dependencyConditions": [
+                            "Completed"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.00:01:00",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "source": {
+                        "type": "JsonSource",
+                        "storeSettings": {
+                            "type": "SftpReadSettings",
+                            "recursive": false,
+                            "enablePartitionDiscovery": false,
+                            "disableChunking": false
+                        },
+                        "formatSettings": {
+                            "type": "JsonReadSettings"
+                        }
+                    },
+                    "sink": {
+                        "type": "JsonSink",
+                        "storeSettings": {
+                            "type": "SftpWriteSettings",
+                            "operationTimeout": "01:00:00",
+                            "useTempFileRename": true
+                        },
+                        "formatSettings": {
+                            "type": "JsonWriteSettings"
+                        }
+                    },
+                    "enableStaging": false
+                },
+                "inputs": [
+                    {
+                        "referenceName": "DS_SFTP_Filename",
+                        "type": "DatasetReference",
+                        "parameters": {
+                            "ds_filePath": {
+                                "value": "@variables('varFilePath')",
+                                "type": "Expression"
+                            },
+                            "ds_fileName": {
+                                "value": "@variables('varMergeFileName')",
+                                "type": "Expression"
+                            }
+                        }
+                    }
+                ],
+                "outputs": [
+                    {
+                        "referenceName": "DS_SFTP_Filename",
+                        "type": "DatasetReference",
+                        "parameters": {
+                            "ds_filePath": {
+                                "value": "@concat(pipeline().parameters.sftpPath,\n        pipeline().parameters.ErrorPath,\n        pipeline().parameters.EntityName, '/',\n        substring(variables('varProcessDateTime'), 0, 6),'/')",
+                                "type": "Expression"
+                            },
+                            "ds_fileName": {
+                                "value": "@replace(variables('varMergeFileName'),\n         '.json',\n         concat('_',pipeline().RunId,'.json'))",
+                                "type": "Expression"
+                            }
+                        }
+                    }
+                ]
+            },
+            {
+                "name": "Remove file from Landing folder",
+                "type": "Delete",
+                "dependsOn": [
+                    {
+                        "activity": "Copy file to Error folder",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.00:00:30",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "dataset": {
+                        "referenceName": "DS_SFTP_Filename",
+                        "type": "DatasetReference",
+                        "parameters": {
+                            "ds_filePath": {
+                                "value": "@variables('varFilePath')",
+                                "type": "Expression"
+                            },
+                            "ds_fileName": {
+                                "value": "@variables('varMergeFileName')",
+                                "type": "Expression"
+                            }
+                        }
+                    },
+                    "enableLogging": false,
+                    "storeSettings": {
+                        "type": "SftpReadSettings",
+                        "recursive": false,
+                        "enablePartitionDiscovery": false,
+                        "disableChunking": false
+                    }
+                }
+            },
+            {
+                "name": "DataFlow Account",
+                "type": "ExecuteDataFlow",
+                "dependsOn": [
+                    {
+                        "activity": "Set varMergedFilesListFileName",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    },
+                    {
+                        "activity": "Set varProcessFilesPath",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    },
+                    {
+                        "activity": "Set varWarningFileName",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "3.00:00:00",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "dataflow": {
+                        "referenceName": "DF_D365_Account",
+                        "type": "DataFlowReference",
+                        "parameters": {
+                            "df_SyncType": {
+                                "value": "'@{variables('varSyncType')}'",
+                                "type": "Expression"
+                            },
+                            "df_WarningFileName": {
+                                "value": "'@{variables('varWarningFileName')}'",
+                                "type": "Expression"
+                            },
+                            "df_MergedFilesListFileName": {
+                                "value": "'@{variables('varMergedFilesListFileName')}'",
+                                "type": "Expression"
+                            }
+                        },
+                        "datasetParameters": {
+                            "M3Account": {
+                                "ds_filePath": {
+                                    "value": "@variables('varFilePath')",
+                                    "type": "Expression"
+                                },
+                                "ds_fileName": {
+                                    "value": "@variables('varMergeFileName')",
+                                    "type": "Expression"
+                                }
+                            },
+                            "CreateWarningFile": {
+                                "ds_containerName": {
+                                    "value": "@pipeline().parameters.adlsContainerName",
+                                    "type": "Expression"
+                                },
+                                "ds_filePath": {
+                                    "value": "@variables('varProcessFilesPath')",
+                                    "type": "Expression"
+                                },
+                                "ds_fileName": {
+                                    "value": "@variables('varWarningFileName')",
+                                    "type": "Expression"
+                                }
+                            },
+                            "CreateFileMergedFilesList": {
+                                "ds_filePath": {
+                                    "value": "@variables('varFilePath')",
+                                    "type": "Expression"
+                                }
+                            }
+                        }
+                    },
+                    "integrationRuntime": {
+                        "referenceName": "30minTTL-small",
+                        "type": "IntegrationRuntimeReference"
+                    },
+                    "traceLevel": "None",
+                    "cacheSinks": {
+                        "firstRowOnly": true
+                    }
+                }
+            },
+            {
+                "name": "RunningTaskError_DFAccount",
+                "type": "Lookup",
+                "dependsOn": [
+                    {
+                        "activity": "DataFlow Account",
+                        "dependencyConditions": [
+                            "Failed"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.00:00:30",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "source": {
+                        "type": "MariaDBSource",
+                        "query": {
+                            "value": "@concat('CALL management.SP_RunningTaskErrorSynapse(''',\n        pipeline().parameters.RunningTask_TaskName,\n        ''',',\n        if(empty(pipeline().parameters.RunningTask_LogID),0,pipeline().parameters.RunningTask_LogID),\n        ',',\n        '1,',\n        '''Error Data: ', replace(string(activity('DataFlow Account').error),'''',''''''),'\nPipeline Run ID: ', pipeline().RunId,\n        ''')')",
+                            "type": "Expression"
+                        }
+                    },
+                    "dataset": {
+                        "referenceName": "DS_MariaDB",
+                        "type": "DatasetReference"
+                    }
+                }
+            },
+            {
+                "name": "Set varWarningFileName",
+                "type": "SetVariable",
+                "dependsOn": [
+                    {
+                        "activity": "Merge json files",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "variableName": "varWarningFileName",
+                    "value": {
+                        "value": "@concat(pipeline().parameters.EntityName,\n        '_WarningManualUpdate_',\n        variables('varProcessDateTime'),\n        '.json')",
+                        "type": "Expression"
+                    }
+                }
+            },
+            {
+                "name": "LookForWarningFile",
+                "type": "Lookup",
+                "dependsOn": [
+                    {
+                        "activity": "DataFlow Account",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.00:05:00",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "source": {
+                        "type": "JsonSource",
+                        "storeSettings": {
+                            "type": "AzureBlobFSReadSettings",
+                            "recursive": true,
+                            "enablePartitionDiscovery": false
+                        },
+                        "formatSettings": {
+                            "type": "JsonReadSettings"
+                        }
+                    },
+                    "dataset": {
+                        "referenceName": "DS_ADLS_Filename",
+                        "type": "DatasetReference",
+                        "parameters": {
+                            "ds_containerName": {
+                                "value": "@pipeline().parameters.adlsContainerName",
+                                "type": "Expression"
+                            },
+                            "ds_filePath": {
+                                "value": "@variables('varProcessFilesPath')",
+                                "type": "Expression"
+                            },
+                            "ds_fileName": {
+                                "value": "@variables('varWarningFileName')",
+                                "type": "Expression"
+                            }
+                        }
+                    },
+                    "firstRowOnly": false
+                }
+            },
+            {
+                "name": "If WarningFile",
+                "description": "If there is warning(s), then call RunningTaskError ",
+                "type": "IfCondition",
+                "dependsOn": [
+                    {
+                        "activity": "LookForWarningFile",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "userProperties": [],
+                "typeProperties": {
+                    "expression": {
+                        "value": "@greater(activity('LookForWarningFile').output.count,0)",
+                        "type": "Expression"
+                    },
+                    "ifTrueActivities": [
+                        {
+                            "name": "RunningTaskError_WarningForManualUpdate",
+                            "type": "Lookup",
+                            "dependsOn": [
+                                {
+                                    "activity": "Set varWarningContent",
+                                    "dependencyConditions": [
+                                        "Succeeded"
+                                    ]
+                                }
+                            ],
+                            "policy": {
+                                "timeout": "0.00:00:30",
+                                "retry": 0,
+                                "retryIntervalInSeconds": 30,
+                                "secureOutput": false,
+                                "secureInput": false
+                            },
+                            "userProperties": [],
+                            "typeProperties": {
+                                "source": {
+                                    "type": "MariaDBSource",
+                                    "query": {
+                                        "value": "@concat('CALL management.SP_RunningTaskErrorSynapse(''',\n        pipeline().parameters.RunningTask_TaskName,\n        ''',',\n        if(empty(pipeline().parameters.RunningTask_LogID),0,pipeline().parameters.RunningTask_LogID),\n        ',',\n        '0,',\n        '''Error: ', variables('varWarningContent'),'\nPipeline Run ID: ', pipeline().RunId,\n        ''')')",
+                                        "type": "Expression"
+                                    }
+                                },
+                                "dataset": {
+                                    "referenceName": "DS_MariaDB",
+                                    "type": "DatasetReference"
+                                }
+                            }
+                        },
+                        {
+                            "name": "Set varWarningContent",
+                            "type": "SetVariable",
+                            "dependsOn": [],
+                            "policy": {
+                                "secureOutput": false,
+                                "secureInput": false
+                            },
+                            "userProperties": [],
+                            "typeProperties": {
+                                "variableName": "varWarningContent",
+                                "value": {
+                                    "value": "@if(greater(length(string(activity('LookForWarningFile').output.value)),  1000), concat(substring(replace(string(activity('LookForWarningFile').output.value),'''',''''''),0, 900), ' AVERTISSEMENT : LE FICHIER COMPORTE PLUS DE 1000 LIGNES') , replace(string(activity('LookForWarningFile').output.value),'''',''''''))",
+                                    "type": "Expression"
+                                }
+                            }
+                        }
+                    ]
+                }
+            },
+            {
+                "name": "DataFlow Account Update Bill To",
+                "type": "ExecuteDataFlow",
+                "dependsOn": [
+                    {
+                        "activity": "DataFlow Account",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "3.00:00:00",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "dataflow": {
+                        "referenceName": "DF_D365_Account_UpdateBillTo",
+                        "type": "DataFlowReference",
+                        "parameters": {
+                            "df_SyncType": {
+                                "value": "'@{variables('varSyncType')}'",
+                                "type": "Expression"
+                            },
+                            "df_FilePath": {
+                                "value": "'@{variables('varFilePath')}'",
+                                "type": "Expression"
+                            },
+                            "df_ProcessedPath": {
+                                "value": "'@{concat(pipeline().parameters.sftpPath,\n        pipeline().parameters.ProcessedPath,\n        pipeline().parameters.EntityName, '_',\n        variables('varSyncType'), '/',\n        substring(variables('varProcessDateTime'), 0, 6),'/')\n}'",
+                                "type": "Expression"
+                            },
+                            "df_WarningFileName": {
+                                "value": "'@{variables('varWarningFileName')}'",
+                                "type": "Expression"
+                            }
+                        },
+                        "datasetParameters": {
+                            "M3Account": {
+                                "ds_filePath": {
+                                    "value": "@variables('varFilePath')",
+                                    "type": "Expression"
+                                },
+                                "ds_fileName": {
+                                    "value": "@variables('varMergeFileName')",
+                                    "type": "Expression"
+                                }
+                            }
+                        }
+                    },
+                    "integrationRuntime": {
+                        "referenceName": "30minTTL-small",
+                        "type": "IntegrationRuntimeReference"
+                    },
+                    "traceLevel": "None",
+                    "cacheSinks": {
+                        "firstRowOnly": true
+                    }
+                }
+            },
+            {
+                "name": "RunningTaskError_DFAccountUpdateBillTo",
+                "type": "Lookup",
+                "dependsOn": [
+                    {
+                        "activity": "DataFlow Account Update Bill To",
+                        "dependencyConditions": [
+                            "Failed"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.00:00:30",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "source": {
+                        "type": "MariaDBSource",
+                        "query": {
+                            "value": "@concat('CALL management.SP_RunningTaskErrorSynapse(''',\n        pipeline().parameters.RunningTask_TaskName,\n        ''',',\n        if(empty(pipeline().parameters.RunningTask_LogID),0,pipeline().parameters.RunningTask_LogID),\n        ',',\n        '1,',\n        '''Error Data: ', replace(string(activity('DataFlow Account Update Bill To').error),'''',''''''),'\nPipeline Run ID: ', pipeline().RunId,\n        ''')')",
+                            "type": "Expression"
+                        }
+                    },
+                    "dataset": {
+                        "referenceName": "DS_MariaDB",
+                        "type": "DatasetReference"
+                    }
+                }
+            },
+            {
+                "name": "Copy file to Error folder Update Bill To",
+                "type": "Copy",
+                "dependsOn": [
+                    {
+                        "activity": "RunningTaskError_DFAccountUpdateBillTo",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.00:01:00",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "source": {
+                        "type": "JsonSource",
+                        "storeSettings": {
+                            "type": "SftpReadSettings",
+                            "recursive": false,
+                            "enablePartitionDiscovery": false,
+                            "disableChunking": false
+                        },
+                        "formatSettings": {
+                            "type": "JsonReadSettings"
+                        }
+                    },
+                    "sink": {
+                        "type": "JsonSink",
+                        "storeSettings": {
+                            "type": "SftpWriteSettings",
+                            "operationTimeout": "01:00:00",
+                            "useTempFileRename": true
+                        },
+                        "formatSettings": {
+                            "type": "JsonWriteSettings"
+                        }
+                    },
+                    "enableStaging": false
+                },
+                "inputs": [
+                    {
+                        "referenceName": "DS_SFTP_Filename",
+                        "type": "DatasetReference",
+                        "parameters": {
+                            "ds_filePath": {
+                                "value": "@variables('varFilePath')",
+                                "type": "Expression"
+                            },
+                            "ds_fileName": {
+                                "value": "@variables('varMergeFileName')",
+                                "type": "Expression"
+                            }
+                        }
+                    }
+                ],
+                "outputs": [
+                    {
+                        "referenceName": "DS_SFTP_Filename",
+                        "type": "DatasetReference",
+                        "parameters": {
+                            "ds_filePath": {
+                                "value": "@concat(pipeline().parameters.sftpPath,\n        pipeline().parameters.ErrorPath,\n        pipeline().parameters.EntityName, '/',\n        substring(variables('varProcessDateTime'), 0, 6),'/')",
+                                "type": "Expression"
+                            },
+                            "ds_fileName": {
+                                "value": "@replace(variables('varMergeFileName'),\n         '.json',\n         concat('_',pipeline().RunId,'.json'))",
+                                "type": "Expression"
+                            }
+                        }
+                    }
+                ]
+            },
+            {
+                "name": "Remove file from Landing folder Update Bill To",
+                "type": "Delete",
+                "dependsOn": [
+                    {
+                        "activity": "Copy file to Error folder Update Bill To",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.00:00:30",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "dataset": {
+                        "referenceName": "DS_SFTP_Filename",
+                        "type": "DatasetReference",
+                        "parameters": {
+                            "ds_filePath": {
+                                "value": "@variables('varFilePath')",
+                                "type": "Expression"
+                            },
+                            "ds_fileName": {
+                                "value": "@variables('varMergeFileName')",
+                                "type": "Expression"
+                            }
+                        }
+                    },
+                    "enableLogging": false,
+                    "storeSettings": {
+                        "type": "SftpReadSettings",
+                        "recursive": false,
+                        "enablePartitionDiscovery": false,
+                        "disableChunking": false
+                    }
+                }
+            },
+            {
+                "name": "Set varProcessFilesPath",
+                "type": "SetVariable",
+                "dependsOn": [
+                    {
+                        "activity": "Merge json files",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "variableName": "varProcessFilesPath",
+                    "value": {
+                        "value": "@concat(pipeline().parameters.adlsProcessFilesPath,\n        pipeline().parameters.EntityName, '/')",
+                        "type": "Expression"
+                    }
+                }
+            },
+            {
+                "name": "Set varMergedFilesListFileName",
+                "type": "SetVariable",
+                "dependsOn": [
+                    {
+                        "activity": "Merge json files",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "variableName": "varMergedFilesListFileName",
+                    "value": {
+                        "value": "@concat(pipeline().parameters.EntityName,\n        '_MergedFilesList_',\n        variables('varProcessDateTime'),\n        '.txt')",
+                        "type": "Expression"
+                    }
+                }
+            },
+            {
+                "name": "Copy Merged files to Archive",
+                "type": "Copy",
+                "dependsOn": [
+                    {
+                        "activity": "DataFlow Account Update Bill To",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.12:00:00",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "source": {
+                        "type": "JsonSource",
+                        "storeSettings": {
+                            "type": "SftpReadSettings",
+                            "fileListPath": {
+                                "value": "@concat(variables('varFilePath'),variables('varMergedFilesListFileName'))",
+                                "type": "Expression"
+                            },
+                            "enablePartitionDiscovery": false,
+                            "disableChunking": false
+                        },
+                        "formatSettings": {
+                            "type": "JsonReadSettings"
+                        }
+                    },
+                    "sink": {
+                        "type": "JsonSink",
+                        "storeSettings": {
+                            "type": "SftpWriteSettings",
+                            "operationTimeout": "01:00:00",
+                            "useTempFileRename": true
+                        },
+                        "formatSettings": {
+                            "type": "JsonWriteSettings"
+                        }
+                    },
+                    "enableStaging": false
+                },
+                "inputs": [
+                    {
+                        "referenceName": "DS_SFTP_FilePath",
+                        "type": "DatasetReference",
+                        "parameters": {
+                            "ds_filePath": {
+                                "value": "@variables('varFilePath')",
+                                "type": "Expression"
+                            }
+                        }
+                    }
+                ],
+                "outputs": [
+                    {
+                        "referenceName": "DS_SFTP_FilePath",
+                        "type": "DatasetReference",
+                        "parameters": {
+                            "ds_filePath": {
+                                "value": "@concat(pipeline().parameters.sftpPath,\n        pipeline().parameters.ProcessedPath,\n        pipeline().parameters.EntityName, '_',\n        variables('varSyncType'), '/',\n        substring(variables('varProcessDateTime'), 0, 6),\n        '/MergedFiles_',\n        variables('varProcessDateTime'), '/')",
+                                "type": "Expression"
+                            }
+                        }
+                    }
+                ]
+            },
+            {
+                "name": "Delete Merged files list",
+                "type": "Delete",
+                "dependsOn": [
+                    {
+                        "activity": "Copy Merged files to Archive",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.12:00:00",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "dataset": {
+                        "referenceName": "DS_SFTP_FilePath",
+                        "type": "DatasetReference",
+                        "parameters": {
+                            "ds_filePath": {
+                                "value": "@variables('varFilePath')",
+                                "type": "Expression"
+                            }
+                        }
+                    },
+                    "enableLogging": false,
+                    "storeSettings": {
+                        "type": "SftpReadSettings",
+                        "fileListPath": {
+                            "value": "@concat(variables('varFilePath'),variables('varMergedFilesListFileName'))",
+                            "type": "Expression"
+                        },
+                        "enablePartitionDiscovery": false,
+                        "disableChunking": false
+                    }
+                }
+            },
+            {
+                "name": "Delete Merged files list file - OnSuccess",
+                "type": "Delete",
+                "dependsOn": [
+                    {
+                        "activity": "Delete Merged files list",
+                        "dependencyConditions": [
+                            "Completed"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.12:00:00",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "dataset": {
+                        "referenceName": "DS_SFTP_Filename",
+                        "type": "DatasetReference",
+                        "parameters": {
+                            "ds_filePath": {
+                                "value": "@variables('varFilePath')",
+                                "type": "Expression"
+                            },
+                            "ds_fileName": {
+                                "value": "@variables('varMergedFilesListFileName')",
+                                "type": "Expression"
+                            }
+                        }
+                    },
+                    "enableLogging": false,
+                    "storeSettings": {
+                        "type": "SftpReadSettings",
+                        "recursive": true,
+                        "enablePartitionDiscovery": false,
+                        "disableChunking": false
+                    }
+                }
+            },
+            {
+                "name": "Delete Merged files list file - OnFail",
+                "type": "Delete",
+                "dependsOn": [
+                    {
+                        "activity": "RunningTaskError_DFAccountUpdateBillTo",
+                        "dependencyConditions": [
+                            "Completed"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.12:00:00",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "dataset": {
+                        "referenceName": "DS_SFTP_Filename",
+                        "type": "DatasetReference",
+                        "parameters": {
+                            "ds_filePath": {
+                                "value": "@variables('varFilePath')",
+                                "type": "Expression"
+                            },
+                            "ds_fileName": {
+                                "value": "@variables('varMergedFilesListFileName')",
+                                "type": "Expression"
+                            }
+                        }
+                    },
+                    "enableLogging": false,
+                    "storeSettings": {
+                        "type": "SftpReadSettings",
+                        "recursive": true,
+                        "enablePartitionDiscovery": false,
+                        "disableChunking": false
+                    }
+                }
+            },
+            {
+                "name": "Delete Merged files list file - OnDFAccountFail",
+                "type": "Delete",
+                "dependsOn": [
+                    {
+                        "activity": "RunningTaskError_DFAccount",
+                        "dependencyConditions": [
+                            "Completed"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.12:00:00",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "dataset": {
+                        "referenceName": "DS_SFTP_Filename",
+                        "type": "DatasetReference",
+                        "parameters": {
+                            "ds_filePath": {
+                                "value": "@variables('varFilePath')",
+                                "type": "Expression"
+                            },
+                            "ds_fileName": {
+                                "value": "@variables('varMergedFilesListFileName')",
+                                "type": "Expression"
+                            }
+                        }
+                    },
+                    "enableLogging": false,
+                    "storeSettings": {
+                        "type": "SftpReadSettings",
+                        "recursive": true,
+                        "enablePartitionDiscovery": false,
+                        "disableChunking": false
+                    }
+                }
+            },
+            {
+                "name": "Delete WarningFile",
+                "type": "Delete",
+                "dependsOn": [
+                    {
+                        "activity": "If WarningFile",
+                        "dependencyConditions": [
+                            "Completed"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.00:00:30",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "dataset": {
+                        "referenceName": "DS_ADLS_Filename",
+                        "type": "DatasetReference",
+                        "parameters": {
+                            "ds_containerName": {
+                                "value": "@pipeline().parameters.adlsContainerName",
+                                "type": "Expression"
+                            },
+                            "ds_filePath": {
+                                "value": "@variables('varProcessFilesPath')",
+                                "type": "Expression"
+                            },
+                            "ds_fileName": {
+                                "value": "@variables('varWarningFileName')",
+                                "type": "Expression"
+                            }
+                        }
+                    },
+                    "enableLogging": false,
+                    "storeSettings": {
+                        "type": "AzureBlobFSReadSettings",
+                        "recursive": true,
+                        "enablePartitionDiscovery": false
+                    }
+                }
+            }
+        ],
+        "parameters": {
+            "sftpPath": {
+                "type": "string",
+                "defaultValue": "SyncInforToAzure/"
+            },
+            "ProcessedPath": {
+                "type": "string",
+                "defaultValue": "Archive/"
+            },
+            "ErrorPath": {
+                "type": "string",
+                "defaultValue": "Error/"
+            },
+            "adlsContainerName": {
+                "type": "string",
+                "defaultValue": "integration"
+            },
+            "adlsProcessFilesPath": {
+                "type": "string",
+                "defaultValue": "ToD365/Landing/"
+            },
+            "EntityName": {
+                "type": "string",
+                "defaultValue": "Account"
+            },
+            "FullLoadPath": {
+                "type": "string",
+                "defaultValue": "FullLoad"
+            },
+            "SyncPath": {
+                "type": "string",
+                "defaultValue": "Sync"
+            },
+            "FullLoadNbrFilesRequired": {
+                "type": "int",
+                "defaultValue": 19
+            },
+            "RunningTask_LogID": {
+                "type": "string",
+                "defaultValue": "0"
+            },
+            "RunningTask_TaskName": {
+                "type": "string",
+                "defaultValue": "PL_IntgrID_Account_M3ToD365"
+            },
+            "AccountsNotSyncMinRangeNbr": {
+                "type": "string",
+                "defaultValue": "695000"
+            },
+            "AccountsNotSyncMaxRangeNbr": {
+                "type": "string",
+                "defaultValue": "699999"
+            },
+            "isFullLoad": {
+                "type": "bool",
+                "defaultValue": false
+            },
+            "ForceRenewInforApiBearerToken": {
+                "type": "bool",
+                "defaultValue": false
+            }
+        },
+        "variables": {
+            "varProcessDateTime": {
+                "type": "String"
+            },
+            "varFilePath": {
+                "type": "String"
+            },
+            "varProcessFilesPath": {
+                "type": "String"
+            },
+            "varMergeFileName": {
+                "type": "String"
+            },
+            "varWarningFileName": {
+                "type": "String"
+            },
+            "varFullLoadFilePath": {
+                "type": "String"
+            },
+            "varSyncType": {
+                "type": "String"
+            },
+            "varWarningContent": {
+                "type": "String"
+            },
+            "varError": {
+                "type": "String"
+            },
+            "varInforAPIBaseURL": {
+                "type": "String"
+            },
+            "varMergedFilesListFileName": {
+                "type": "String"
+            }
+        },
+        "folder": {
+            "name": "Integration Infor-D365"
+        },
+        "annotations": [],
+        "lastPublishTime": "2024-08-12T14:36:47Z"
+    },
+    "type": "Microsoft.DataFactory/factories/pipelines"
+}

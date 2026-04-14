@@ -1,0 +1,391 @@
+@startuml saniHub-C4-Context
+!define DIRECTION top to bottom
+!define RECTANGLE_COLOR #438DD5
+!define SYSTEM_COLOR #1168BD
+!define PERSON_COLOR #08427B
+
+!include <C4/C4_Context>
+!include <C4/C4_Container>
+!include <C4/C4_Component>
+
+title SaniHub — C4 Model — Niveau 1 : Contexte Système
+
+LAYOUT_TOP_DOWN()
+
+Person(customer, "Client B2B", "Envoie commandes EDI 850")
+Person(operator_it, "Opérateur IT", "Monitor SaniHub, contrôle replays")
+Person(operator_business, "Paul (Resp. intégration)", "Valide flux, traçabilité")
+
+System_Boundary(saniHub, "SaniHub Middleware") {
+    System(saniHub_system, "SaniHub Hub d'Intégration", "Centralise, routage, transforme et traçabilité des flux inter-applicatif")
+}
+
+System_Ext(dynamics365, "Dynamics 365 (CRM)", "Gestion réclamations clients, suivi commandes")
+System_Ext(inforM3, "Infor M3 (ERP)", "Cœur transactionnel : commandes, stock, production")
+System_Ext(truecommerce, "TrueCommerce (EDI)", "Échanges B2B (EDI 850/856/857)")
+System_Ext(ortems, "Ortems (Planning)", "Planification production, ordres fabrication")
+System_Ext(bbx, "BBX (Warehouse Mgmt)", "Picking, packing, shipment")
+System_Ext(suppliers, "Systèmes Fournisseurs", "APIs fournisseurs, EDI")
+
+Rel(customer, truecommerce, "Envoie commande 850 EDI")
+Rel(truecommerce, saniHub_system, "Publie: CommandeClientRecue")
+Rel(saniHub_system, dynamics365, "Route: CommandeClient")
+Rel(saniHub_system, inforM3, "Route: CommandeClient, ODF")
+Rel(saniHub_system, ortems, "Route: ODF")
+Rel(saniHub_system, bbx, "Route: Picklist génération")
+Rel(saniHub_system, suppliers, "Route: CommandeAchat (EDI/API)")
+
+Rel(inforM3, saniHub_system, "Publie: CommandeConfirmee, ExpeditionPreparee")
+Rel(ortems, saniHub_system, "Publie: ODF.Confirmee, Advancement")
+Rel(bbx, saniHub_system, "Publie: PicklistComplete, ExpeditionPreparee")
+
+Rel(saniHub_system, truecommerce, "Route: Expédition, confirmation")
+Rel(saniHub_system, dynamics365, "Route: Statuts commande, factures")
+
+Rel(operator_it, saniHub_system, "Monitor, setup alerts, replay")
+Rel(operator_business, saniHub_system, "Trace commandes, diagnostic")
+
+SHOW_LEGEND()
+
+@enduml
+
+---
+
+@startuml saniHub-C4-Containers
+!include <C4/C4_Context>
+!include <C4/C4_Container>
+
+title SaniHub — C4 Model — Niveau 2 : Conteneurs
+
+LAYOUT_TOP_DOWN()
+
+Person(operator_it, "Opérateur IT", "Monitoring, troubleshooting")
+
+System_Boundary(saniHub_system, "SaniHub System") {
+    
+    Container(api_gateway, "API Gateway", "Golang + Gin", "Point d'entrée REST/gRPC\n- Authentification OAuth 2.0\n- Rate limiting\n- Request/response logging")
+    
+    Container(router_orchestrator, "Router & Orchestrator", "Golang", "Cœur logique\n- Décide routage via rules\n- Saga orchestration\n- Correlation ID tracking")
+    
+    Container(transformer, "Event Transformer & Validator", "Golang + JSON Schema", "Conversion d'événements\n- Canonical ↔ Format app\n- Validation schémas\n- Error formulation")
+    
+    Container(connector_manager, "Connector Manager & Registry", "Golang", "Gère tous les connecteurs\n- Factory pattern pour créer adapters\n- Health checks\n- Retry logic")
+    
+    Container(message_broker, "Message Broker (RabbitMQ/Kafka)", "RabbitMQ 3.11 | Kafka 3.5", "Découplage async\n- Topics: events, commands, errors\n- Persistent queues\n- Fanout par type événement")
+    
+    Container(event_store, "Event Store (PostgreSQL)", "PostgreSQL 15", "Log immuable\n- Append-only table: events\n- JSONB payload\n- Indexed by correlation_id, timestamp, source_app")
+    
+    Container(state_store, "State Store & Deduplication", "Redis 7", "Cache état transitoire\n- En-cours transactions\n- Message dedup keys (15 min TTL)\n- Connector health status")
+    
+    Container(observability_stack, "Observability Stack", "Prometheus\n+ Grafana\n+ ELK\n+ Jaeger", "Monitoring & Tracing\n- Prometheus metrics\n- Grafana dashboards\n- Elasticsearch logs\n- Jaeger traces")
+    
+    Container(dashboard_control, "Dashboard & Control Plane", "React + Node.js", "Web UI\n- Real-time status\n- Replay manual\n- Routage rules config\n- Alerts")
+}
+
+System_Ext(apps, "Applications Métier\n(M3, Dynamics, Ortems, BBX, TrueCommerce)", "Systems externes")
+
+Rel(apps, api_gateway, "1. Publient événements", "REST POST\n/api/v1/events/publish")
+Rel(api_gateway, router_orchestrator, "2a. Route decision", "gRPC")
+Rel(router_orchestrator, transformer, "2b. Transform canonique", "gRPC")
+Rel(transformer, message_broker, "3. Publie canonical event", "AMQP / Kafka API")
+Rel(message_broker, message_broker, "4. Fanout subscribers", "Route dépend type événement")
+Rel(message_broker, connector_manager, "5. Connecteur reçoit", "Consume topic")
+Rel(connector_manager, apps, "6. Écrit app cible", "OData / REST / JDBC / API maison")
+
+Rel(message_broker, event_store, "LOG: Persist event", "SQL INSERT (async)")
+Rel(connector_manager, state_store, "STATUS: Update", "Redis SET")
+Rel(router_orchestrator, state_store, "TRACK: Dedup, saga state", "Redis GET/SET")
+
+Rel(api_gateway, observability_stack, "Telemetry", "Metrics, logs, traces")
+Rel(router_orchestrator, observability_stack, "Telemetry", "Metrics, logs, traces")
+Rel(connector_manager, observability_stack, "Telemetry", "Metrics, logs, traces")
+
+Rel(event_store, observability_stack, "Expose metrics", "Ready-only")
+Rel(state_store, observability_stack, "Expose health", "Ready-only")
+
+Rel(observability_stack, dashboard_control, "Push data", "HTTP/WebSocket")
+Rel(operator_it, dashboard_control, "Monitor & Control", "Browser (Vue Web)")
+
+Rel(dashboard_control, api_gateway, "Admin APIs\n/replay, /config", "REST/gRPC")
+
+SHOW_LEGEND()
+
+@enduml
+
+---
+
+@startuml SaniHub-Event-Routing
+title SaniHub — Flux Événementiel : Commande Client (Order-to-Cash)
+
+participant "Dynamics 365\n(CRM)" as Dynamics
+participant "TrueCommerce\n(EDI)" as TrueCommerce
+participant "SaniHub\nAPI Gateway" as APIGateway
+participant "SaniHub\nRouter" as Router
+participant "SaniHub\nTransformer" as Transformer
+participant "Message\nBroker" as Broker
+participant "Infor M3\nConnector" as M3Connector
+participant "Ortems\nConnector" as OortemsConnector
+participant "Infor M3\n(ERP)" as M3
+participant "Ortems\n(Planning)" as Ortems
+
+== Flux : Création Commande Client ==
+
+TrueCommerce ->> APIGateway: POST /api/v1/events/publish\n{type: CommandeClientRecue, payload: {...}}
+note over APIGateway: Authentification OAuth 2.0\nRate limit check\nLog entry point
+
+APIGateway ->> Router: Route decision?
+note over Router: Décide routage\n(voir règles statiques)
+
+Router ->> Transformer: Transform → canonical
+Transformer ->> Transformer: TrueCommerce format → CommandeClient (canonical)
+Transformer ->> Broker: Publie event\n{type: CommandeClientCree, correlation_id: CMD-12345, payload: {...}}
+
+Broker ->> M3Connector: Subscribe: CommandeClientCree
+Broker ->> OortemsConnector: Subscribe: CommandeClientCree
+
+M3Connector ->> M3: Connecteur adapte\nCommandeClient → Format M3\nwrite via OData API
+M3 -->> M3Connector: OK (200) + M3_OrderId
+M3Connector ->> Broker: Publie event\n{type: CommandeClientM3Created, correlation_id: CMD-12345, m3_order_id: M3-87654}
+
+OortemsConnector ->> Ortems: Connecteur adapte\nCommandeClient → Format Ortems\nwrite via API Ortems
+Ortems -->> OortemsConnector: OK + Ortems_OrderId
+OortemsConnector ->> Broker: Publie event\n{type: OdfCreated, correlation_id: CMD-12345, ortems_odf_id: ODF-555}
+
+note over Broker: All events persisted\nin Event Store (async)\nwith correlation_id = CMD-12345
+
+== Dashboard Traçabilité ==
+Dynamics ->> APIGateway: GET /api/v1/events/CMD-12345
+APIGateway -->> Dynamics: Retourne tous les events pour CMD-12345\n1. CommandeClientRecue (TrueCommerce)\n2. CommandeClientCree (canonical)\n3. CommandeClientM3Created (M3)\n4. OdfCreated (Ortems)
+
+@enduml
+
+---
+
+@startuml SaniHub-ArchiMate-Business
+title SaniHub — ArchiMate Business Layer
+
+rectangle "Business Processes" {
+    package "Order-to-Cash Process" {
+        rectangle "Order Receipt" as BR1
+        rectangle "Order Validation" as BR2
+        rectangle "Order Fulfillment" as BR3
+        rectangle "Shipment & Billing" as BR4
+        BR1 --> BR2 : event fired
+        BR2 --> BR3 : if valid
+        BR3 --> BR4 : shipment ready
+    }
+    
+    package "Procure-to-Pay Process" {
+        rectangle "Procurement Planning" as BP1
+        rectangle "PO Creation" as BP2
+        rectangle "Goods Receipt" as BP3
+        rectangle "Invoice Processing" as BP4
+        BP1 --> BP2 : need triggered
+        BP2 --> BP3 : po created
+        BP3 --> BP4 : goods received
+    }
+}
+
+rectangle "Business Services" {
+    rectangle "Order Management Service" as BS1
+    rectangle "Procurement Service" as BS2
+    rectangle "Inventory Service" as BS3
+    rectangle "Billing Service" as BS4
+}
+
+BR1 ..> BS1 : supports
+BR2 ..> BS1 : supports
+BR3 ..> BS3 : supports
+BR4 ..> BS4 : supports
+BP1 ..> BS2 : supports
+BP3 ..> BS3 : supports
+
+rectangle "Business Actors" {
+    rectangle "Sales Team\n(Paul - Resp. Intégration)" as BA1
+    rectangle "Production Team" as BA2
+    rectangle "Procurement Team" as BA3
+    rectangle "Finance Team" as BA4
+}
+
+BS1 ..> BA1 : performed by
+BS2 ..> BA3 : performed by
+BS3 ..> BA2 : performed by
+BS4 ..> BA4 : performed by
+
+@enduml
+
+---
+
+@startuml SaniHub-ArchiMate-Application
+title SaniHub — ArchiMate Application Layer
+
+rectangle "Application Components" {
+    package "SaniHub Platform" {
+        rectangle "API Gateway\nComponent" as AC1
+        rectangle "Router & Orchestrator\nComponent" as AC2
+        rectangle "Transformer\nComponent" as AC3
+        rectangle "Connector Manager\nComponent" as AC4
+        rectangle "Event Store\nComponent" as AC5
+        rectangle "State Store\nComponent" as AC6
+        
+        AC1 --> AC2 : routes to
+        AC2 --> AC3 : uses
+        AC3 --> AC4 : triggers
+        AC4 --> AC5 : persists to
+        AC2 --> AC6 : queries state
+    }
+}
+
+rectangle "External Applications" {
+    rectangle "Dynamics 365\n(CRM)" as EA1
+    rectangle "Infor M3\n(ERP)" as EA2
+    rectangle "TrueCommerce\n(EDI)" as EA3
+    rectangle "Ortems\n(Planning)" as EA4
+    rectangle "BBX\n(Warehouse)" as EA5
+}
+
+rectangle "Application Interfaces" {
+    rectangle "Dynamics 365\nConnector" as AI1
+    rectangle "M3 Connector" as AI2
+    rectangle "TrueCommerce\nConnector" as AI3
+    rectangle "Ortems\nConnector" as AI4
+    rectangle "BBX Connector" as AI5
+}
+
+AC4 --> AI1 : manages
+AC4 --> AI2 : manages
+AC4 --> AI3 : manages
+AC4 --> AI4 : manages
+AC4 --> AI5 : manages
+
+AI1 ..> EA1 : interfaces with
+AI2 ..> EA2 : interfaces with
+AI3 ..> EA3 : interfaces with
+AI4 ..> EA4 : interfaces with
+AI5 ..> EA5 : interfaces with
+
+rectangle "Data Objects" {
+    rectangle "CommandeClient\n(Canonical Event)" as DO1
+    rectangle "ODF (Canonical Event)" as DO2
+    rectangle "CommandeAchat\n(Canonical Event)" as DO3
+    rectangle "M3 Order\n(App-specific)" as DO4
+    rectangle "Ortems ODF\n(App-specific)" as DO5
+}
+
+AC3 --> DO1 : produces
+AC3 --> DO2 : produces
+AC3 --> DO3 : produces
+AI2 --> DO4 : transforms to
+AI4 --> DO5 : transforms to
+
+@enduml
+
+
+---
+
+@startuml SaniHub-Deployment-Kubernetes
+title SaniHub — Kubernetes Deployment Architecture (On-Premise)
+
+rectangle "Kubernetes Cluster (On-Premise)" {
+    rectangle "Namespace: sani-hub-prod" {
+        rectangle "Pod: API Gateway" {
+            rectangle "Container: api-gateway:v1.0"
+            rectangle "sidecar: envoy-proxy"
+            rectangle "sidecar: datadog-agent"
+        }
+        
+        rectangle "Pod: Router (x3 replicas)" {
+            rectangle "Container: router:v1.0"
+        }
+        
+        rectangle "Pod: Transformer (x2 replicas)" {
+            rectangle "Container: transformer:v1.0"
+        }
+        
+        rectangle "Pod: Connector Manager" {
+            rectangle "Container: connector-mgr:v1.0"
+        }
+        
+        rectangle "StatefulSet: PostgreSQL" {
+            rectangle "Container: postgresql:15"
+            rectangle "PVC: pgdata (500 GB SSD)"
+        }
+        
+        rectangle "StatefulSet: Redis" {
+            rectangle "Container: redis:7"
+            rectangle "PVC: redisdata (50 GB SSD)"
+        }
+        
+        rectangle "Volumes" {
+            rectangle "PVC: shared-logs (2 TB HDD)"
+            rectangle "ConfigMap: sani-hub-config.yaml"
+            rectangle "Secret: vault-credentials"
+        }
+    }
+    
+    rectangle "Namespace: sani-hub-observability" {
+        rectangle "Pod: Prometheus"
+        rectangle "Pod: Grafana"
+        rectangle "Pod: Elasticsearch"
+        rectangle "Pod: Kibana"
+        rectangle "Pod: Jaeger"
+    }
+    
+    rectangle "Services & Ingress" {
+        rectangle "Service: api-gateway (ClusterIP)"
+        rectangle "Service: postgres (ClusterIP)"
+        rectangle "Service: redis (ClusterIP)"
+        rectangle "Ingress: sani-hub.internal (TLS)"
+    }
+    
+    rectangle "Network Policies" {
+        rectangle "Default: Deny all (deny-all)"
+        rectangle "Allow: api-gateway → router → transformer → connectors"
+        rectangle "Allow: connectors ← message-broker"
+    }
+}
+
+rectangle "External Storage" {
+    rectangle "NFS Volume\n(Log Archives)"
+    rectangle "Backup Storage\n(Daily snapshots)"
+}
+
+rectangle "External Services" {
+    rectangle "HashiCorp Vault\n(Secrets Management)"
+    rectangle "External App APIs\n(M3, Dynamics, etc)"
+}
+
+@enduml
+
+---
+
+@startuml SaniHub-Event-Format
+title SaniHub — Format Événement Standard
+
+rectangle "Event Structure" {
+    rectangle "Event Wrapper" {
+        rectangle "message_id: UUID" 
+        rectangle "correlation_id: string (e.g., CMD-12345)\n[links together all events for a business transaction]"
+        rectangle "event_type: string (CommandeClientCree, OdfCreated, etc)"
+        rectangle "timestamp: ISO8601"
+        rectangle "source_app: string (dynamics365, M3, TrueCommerce, Ortems, BBX)"
+        rectangle "target_apps: [string] (M3, Ortems)"
+        rectangle "status: enum (Published | Routed | Delivered | Failed)"
+        rectangle "retry_count: int"
+        rectangle "created_by: ServiceAccount"
+    }
+    
+    rectangle "Event Payload (Canonical)" {
+        rectangle "data: {}\n[app-agnostic business data\n e.g., CommandeClient { id, dateCreation, client, lignes[], adresse_livraison }]"
+        rectangle "metadata: {}\n[optional context: user_id, tenant_id, etc]"
+        rectangle "transformations: []\n[audit trail of schema conversions]"
+    }
+}
+
+rectangle "Event Routing Rules (Config)" {
+    rectangle "Rule 1: IF event_type == CommandeClientCree THEN route to [M3, Ortems, Dynamics]"
+    rectangle "Rule 2: IF event_type == OdfCreated THEN route to [Ortems, BBX] IF status != Draft"
+    rectangle "Rule 3: IF event_type == ReceptionMarchandise THEN route to [Dynamics, M3] with retry(3, exponential)"
+}
+
+@enduml

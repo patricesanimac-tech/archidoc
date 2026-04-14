@@ -1,0 +1,719 @@
+{
+    "name": "PL_IntgrID_CustomerAsset_M3ToD365_Inner",
+    "properties": {
+        "activities": [
+            {
+                "name": "Set varProcessDateTime",
+                "type": "SetVariable",
+                "dependsOn": [],
+                "policy": {
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "variableName": "varProcessDateTime",
+                    "value": {
+                        "value": "@convertFromUtc(utcnow(),'Eastern Standard Time','yyyyMMddTHHmmss')",
+                        "type": "Expression"
+                    }
+                }
+            },
+            {
+                "name": "Set varFilePath",
+                "type": "SetVariable",
+                "dependsOn": [
+                    {
+                        "activity": "Set varProcessDateTime",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "variableName": "varFilePath",
+                    "value": {
+                        "value": "@concat(pipeline().parameters.sftpPath,\n        pipeline().parameters.EntityName, '/')",
+                        "type": "Expression"
+                    }
+                }
+            },
+            {
+                "name": "Create Ordered Files List file",
+                "type": "ExecuteDataFlow",
+                "dependsOn": [
+                    {
+                        "activity": "Set varListFileName",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.00:10:00",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "dataflow": {
+                        "referenceName": "DF_SFTP_OrderedFilesList",
+                        "type": "DataFlowReference",
+                        "parameters": {
+                            "df_FilePath": {
+                                "value": "'@{variables('varFilePath')}'",
+                                "type": "Expression"
+                            },
+                            "df_FileName": {
+                                "value": "'@{variables('varListFileName')}'",
+                                "type": "Expression"
+                            }
+                        },
+                        "datasetParameters": {
+                            "GetSFTPfiles": {
+                                "ds_filePath": {
+                                    "value": "@variables('varFilePath')",
+                                    "type": "Expression"
+                                }
+                            },
+                            "CreateOrderedFilesList": {
+                                "ds_containerName": {
+                                    "value": "@pipeline().parameters.adlsContainerName",
+                                    "type": "Expression"
+                                },
+                                "ds_filePath": {
+                                    "value": "@variables('varProcessFilesPath')",
+                                    "type": "Expression"
+                                }
+                            }
+                        }
+                    },
+                    "compute": {
+                        "coreCount": 8,
+                        "computeType": "General"
+                    },
+                    "traceLevel": "Fine"
+                }
+            },
+            {
+                "name": "Set varProcessFilesPath",
+                "type": "SetVariable",
+                "dependsOn": [
+                    {
+                        "activity": "Set varFilePath",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "variableName": "varProcessFilesPath",
+                    "value": {
+                        "value": "@concat(pipeline().parameters.adlsProcessFilesPath,\n        pipeline().parameters.EntityName, '/')",
+                        "type": "Expression"
+                    }
+                }
+            },
+            {
+                "name": "Read Ordered Files List file",
+                "type": "Lookup",
+                "dependsOn": [
+                    {
+                        "activity": "Create Ordered Files List file",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.00:00:30",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "source": {
+                        "type": "JsonSource",
+                        "storeSettings": {
+                            "type": "AzureBlobFSReadSettings",
+                            "recursive": false,
+                            "enablePartitionDiscovery": false
+                        },
+                        "formatSettings": {
+                            "type": "JsonReadSettings"
+                        }
+                    },
+                    "dataset": {
+                        "referenceName": "DS_ADLS_Filename",
+                        "type": "DatasetReference",
+                        "parameters": {
+                            "ds_containerName": {
+                                "value": "@pipeline().parameters.adlsContainerName",
+                                "type": "Expression"
+                            },
+                            "ds_filePath": {
+                                "value": "@variables('varProcessFilesPath')",
+                                "type": "Expression"
+                            },
+                            "ds_fileName": {
+                                "value": "@variables('varListFileName')",
+                                "type": "Expression"
+                            }
+                        }
+                    },
+                    "firstRowOnly": false
+                }
+            },
+            {
+                "name": "Set varListFileName",
+                "type": "SetVariable",
+                "dependsOn": [
+                    {
+                        "activity": "Set varProcessFilesPath",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "variableName": "varListFileName",
+                    "value": {
+                        "value": "@concat(pipeline().parameters.EntityName,\n        variables('varProcessDateTime'),'.json')",
+                        "type": "Expression"
+                    }
+                }
+            },
+            {
+                "name": "ForEach1",
+                "type": "ForEach",
+                "dependsOn": [
+                    {
+                        "activity": "Read Ordered Files List file",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "userProperties": [],
+                "typeProperties": {
+                    "items": {
+                        "value": "@activity('Read Ordered Files List file').output.value",
+                        "type": "Expression"
+                    },
+                    "isSequential": true,
+                    "activities": [
+                        {
+                            "name": "Copy file to Error folder",
+                            "type": "Copy",
+                            "dependsOn": [
+                                {
+                                    "activity": "RunningTaskError_DFUnit",
+                                    "dependencyConditions": [
+                                        "Completed"
+                                    ]
+                                }
+                            ],
+                            "policy": {
+                                "timeout": "0.00:01:00",
+                                "retry": 0,
+                                "retryIntervalInSeconds": 30,
+                                "secureOutput": false,
+                                "secureInput": false
+                            },
+                            "userProperties": [],
+                            "typeProperties": {
+                                "source": {
+                                    "type": "JsonSource",
+                                    "storeSettings": {
+                                        "type": "SftpReadSettings",
+                                        "recursive": false,
+                                        "enablePartitionDiscovery": false,
+                                        "disableChunking": false
+                                    },
+                                    "formatSettings": {
+                                        "type": "JsonReadSettings"
+                                    }
+                                },
+                                "sink": {
+                                    "type": "JsonSink",
+                                    "storeSettings": {
+                                        "type": "SftpWriteSettings",
+                                        "operationTimeout": "01:00:00",
+                                        "useTempFileRename": true
+                                    },
+                                    "formatSettings": {
+                                        "type": "JsonWriteSettings"
+                                    }
+                                },
+                                "enableStaging": false
+                            },
+                            "inputs": [
+                                {
+                                    "referenceName": "DS_SFTP_Filename",
+                                    "type": "DatasetReference",
+                                    "parameters": {
+                                        "ds_filePath": {
+                                            "value": "@variables('varFilePath')",
+                                            "type": "Expression"
+                                        },
+                                        "ds_fileName": {
+                                            "value": "@item().FileName",
+                                            "type": "Expression"
+                                        }
+                                    }
+                                }
+                            ],
+                            "outputs": [
+                                {
+                                    "referenceName": "DS_SFTP_Filename",
+                                    "type": "DatasetReference",
+                                    "parameters": {
+                                        "ds_filePath": {
+                                            "value": "@concat(pipeline().parameters.sftpPath,\n        pipeline().parameters.ErrorPath,\n        pipeline().parameters.EntityName, '/',\n        substring(variables('varProcessDateTime'), 0, 6),'/')",
+                                            "type": "Expression"
+                                        },
+                                        "ds_fileName": {
+                                            "value": "@replace(item().FileName,\n         '.json',\n         concat('_',pipeline().RunId,'.json'))",
+                                            "type": "Expression"
+                                        }
+                                    }
+                                }
+                            ]
+                        },
+                        {
+                            "name": "Remove file from Landing folder",
+                            "type": "Delete",
+                            "dependsOn": [
+                                {
+                                    "activity": "Copy file to Error folder",
+                                    "dependencyConditions": [
+                                        "Succeeded"
+                                    ]
+                                }
+                            ],
+                            "policy": {
+                                "timeout": "0.00:00:30",
+                                "retry": 0,
+                                "retryIntervalInSeconds": 30,
+                                "secureOutput": false,
+                                "secureInput": false
+                            },
+                            "userProperties": [],
+                            "typeProperties": {
+                                "dataset": {
+                                    "referenceName": "DS_SFTP_Filename",
+                                    "type": "DatasetReference",
+                                    "parameters": {
+                                        "ds_filePath": {
+                                            "value": "@variables('varFilePath')",
+                                            "type": "Expression"
+                                        },
+                                        "ds_fileName": {
+                                            "value": "@item().FileName",
+                                            "type": "Expression"
+                                        }
+                                    }
+                                },
+                                "enableLogging": false,
+                                "storeSettings": {
+                                    "type": "SftpReadSettings",
+                                    "recursive": false,
+                                    "enablePartitionDiscovery": false,
+                                    "disableChunking": false
+                                }
+                            }
+                        },
+                        {
+                            "name": "DataFlow CustomerAsset",
+                            "type": "ExecuteDataFlow",
+                            "dependsOn": [
+                                {
+                                    "activity": "Set varWarningFileName",
+                                    "dependencyConditions": [
+                                        "Succeeded"
+                                    ]
+                                }
+                            ],
+                            "policy": {
+                                "timeout": "0.01:00:00",
+                                "retry": 0,
+                                "retryIntervalInSeconds": 30,
+                                "secureOutput": false,
+                                "secureInput": false
+                            },
+                            "userProperties": [],
+                            "typeProperties": {
+                                "dataflow": {
+                                    "referenceName": "DF_D365_CustomerAsset",
+                                    "type": "DataFlowReference",
+                                    "parameters": {
+                                        "df_FilePath": {
+                                            "value": "'@{variables('varFilePath')}'",
+                                            "type": "Expression"
+                                        },
+                                        "df_ProcessedPath": {
+                                            "value": "'@{concat(pipeline().parameters.sftpPath,\n        pipeline().parameters.ProcessedPath,\n        pipeline().parameters.EntityName, '/',\n        substring(variables('varProcessDateTime'), 0, 6),'/')}'",
+                                            "type": "Expression"
+                                        },
+                                        "df_WarningFileName": {
+                                            "value": "'@{variables('varWarningFileName')}'",
+                                            "type": "Expression"
+                                        }
+                                    },
+                                    "datasetParameters": {
+                                        "SFTPCustomerAsset": {
+                                            "ds_filePath": {
+                                                "value": "@variables('varFilePath')",
+                                                "type": "Expression"
+                                            },
+                                            "ds_fileName": {
+                                                "value": "@item().FileName",
+                                                "type": "Expression"
+                                            }
+                                        },
+                                        "CreateWarningFile": {
+                                            "ds_containerName": {
+                                                "value": "@pipeline().parameters.adlsContainerName",
+                                                "type": "Expression"
+                                            },
+                                            "ds_filePath": {
+                                                "value": "@variables('varProcessFilesPath')",
+                                                "type": "Expression"
+                                            }
+                                        }
+                                    }
+                                },
+                                "compute": {
+                                    "coreCount": 8,
+                                    "computeType": "General"
+                                },
+                                "traceLevel": "Fine"
+                            }
+                        },
+                        {
+                            "name": "RunningTaskError_DFUnit",
+                            "type": "Lookup",
+                            "dependsOn": [
+                                {
+                                    "activity": "DataFlow CustomerAsset",
+                                    "dependencyConditions": [
+                                        "Failed"
+                                    ]
+                                }
+                            ],
+                            "policy": {
+                                "timeout": "0.00:00:30",
+                                "retry": 0,
+                                "retryIntervalInSeconds": 30,
+                                "secureOutput": false,
+                                "secureInput": false
+                            },
+                            "userProperties": [],
+                            "typeProperties": {
+                                "source": {
+                                    "type": "MariaDBSource",
+                                    "query": {
+                                        "value": "@concat('CALL management.SP_RunningTaskErrorSynapse(''',\n        pipeline().parameters.RunningTask_TaskName,\n        ''',',\n        if(empty(pipeline().parameters.RunningTask_LogID),0,pipeline().parameters.RunningTask_LogID),\n        ',',\n        '1,',\n        '''Error Data: ', replace(string(activity('DataFlow CustomerAsset').error),'''',''''''),'\nPipeline Run ID: ', pipeline().RunId,\n        ''')')",
+                                        "type": "Expression"
+                                    }
+                                },
+                                "dataset": {
+                                    "referenceName": "DS_MariaDB",
+                                    "type": "DatasetReference"
+                                }
+                            }
+                        },
+                        {
+                            "name": "Set varWarningFileName",
+                            "type": "SetVariable",
+                            "dependsOn": [],
+                            "policy": {
+                                "secureOutput": false,
+                                "secureInput": false
+                            },
+                            "userProperties": [],
+                            "typeProperties": {
+                                "variableName": "varWarningFileName",
+                                "value": {
+                                    "value": "@concat(pipeline().parameters.EntityName,\n        '_Warning_',\n        variables('varProcessDateTime'),'.json')",
+                                    "type": "Expression"
+                                }
+                            }
+                        },
+                        {
+                            "name": "LookForWarningFile",
+                            "type": "Lookup",
+                            "dependsOn": [
+                                {
+                                    "activity": "DataFlow CustomerAsset",
+                                    "dependencyConditions": [
+                                        "Succeeded"
+                                    ]
+                                }
+                            ],
+                            "policy": {
+                                "timeout": "0.00:01:00",
+                                "retry": 0,
+                                "retryIntervalInSeconds": 30,
+                                "secureOutput": false,
+                                "secureInput": false
+                            },
+                            "userProperties": [],
+                            "typeProperties": {
+                                "source": {
+                                    "type": "JsonSource",
+                                    "storeSettings": {
+                                        "type": "AzureBlobFSReadSettings",
+                                        "recursive": true,
+                                        "enablePartitionDiscovery": false
+                                    },
+                                    "formatSettings": {
+                                        "type": "JsonReadSettings"
+                                    }
+                                },
+                                "dataset": {
+                                    "referenceName": "DS_ADLS_Filename",
+                                    "type": "DatasetReference",
+                                    "parameters": {
+                                        "ds_containerName": {
+                                            "value": "@pipeline().parameters.adlsContainerName",
+                                            "type": "Expression"
+                                        },
+                                        "ds_filePath": {
+                                            "value": "@variables('varProcessFilesPath')",
+                                            "type": "Expression"
+                                        },
+                                        "ds_fileName": {
+                                            "value": "@variables('varWarningFileName')",
+                                            "type": "Expression"
+                                        }
+                                    }
+                                },
+                                "firstRowOnly": false
+                            }
+                        },
+                        {
+                            "name": "If Warning",
+                            "description": "If there is warning(s), then call RunningTaskError ",
+                            "type": "IfCondition",
+                            "dependsOn": [
+                                {
+                                    "activity": "LookForWarningFile",
+                                    "dependencyConditions": [
+                                        "Succeeded"
+                                    ]
+                                }
+                            ],
+                            "userProperties": [],
+                            "typeProperties": {
+                                "expression": {
+                                    "value": "@greater(activity('LookForWarningFile').output.count,0)",
+                                    "type": "Expression"
+                                },
+                                "ifTrueActivities": [
+                                    {
+                                        "name": "RunningTaskError_Warning",
+                                        "type": "Lookup",
+                                        "dependsOn": [],
+                                        "policy": {
+                                            "timeout": "0.00:00:30",
+                                            "retry": 0,
+                                            "retryIntervalInSeconds": 30,
+                                            "secureOutput": false,
+                                            "secureInput": false
+                                        },
+                                        "userProperties": [],
+                                        "typeProperties": {
+                                            "source": {
+                                                "type": "MariaDBSource",
+                                                "query": {
+                                                    "value": "@concat('CALL management.SP_RunningTaskErrorSynapse(''',\n        pipeline().parameters.RunningTask_TaskName,\n        ''',',\n        if(empty(pipeline().parameters.RunningTask_LogID),0,pipeline().parameters.RunningTask_LogID),\n        ',',\n        '0,',\n        '''', replace(string(activity('LookForWarningFile').output.value),'''',''''''),'\nPipeline Run ID: ', pipeline().RunId,\n        ''')')",
+                                                    "type": "Expression"
+                                                }
+                                            },
+                                            "dataset": {
+                                                "referenceName": "DS_MariaDB",
+                                                "type": "DatasetReference"
+                                            }
+                                        }
+                                    }
+                                ]
+                            }
+                        },
+                        {
+                            "name": "Delete WarningManualUpdateFile",
+                            "type": "Delete",
+                            "dependsOn": [
+                                {
+                                    "activity": "If Warning",
+                                    "dependencyConditions": [
+                                        "Succeeded"
+                                    ]
+                                }
+                            ],
+                            "policy": {
+                                "timeout": "0.00:01:00",
+                                "retry": 0,
+                                "retryIntervalInSeconds": 30,
+                                "secureOutput": false,
+                                "secureInput": false
+                            },
+                            "userProperties": [],
+                            "typeProperties": {
+                                "dataset": {
+                                    "referenceName": "DS_ADLS_Filename",
+                                    "type": "DatasetReference",
+                                    "parameters": {
+                                        "ds_containerName": {
+                                            "value": "@pipeline().parameters.adlsContainerName",
+                                            "type": "Expression"
+                                        },
+                                        "ds_filePath": {
+                                            "value": "@variables('varProcessFilesPath')",
+                                            "type": "Expression"
+                                        },
+                                        "ds_fileName": {
+                                            "value": "@variables('varWarningFileName')",
+                                            "type": "Expression"
+                                        }
+                                    }
+                                },
+                                "enableLogging": false,
+                                "storeSettings": {
+                                    "type": "AzureBlobFSReadSettings",
+                                    "recursive": true,
+                                    "enablePartitionDiscovery": false
+                                }
+                            }
+                        }
+                    ]
+                }
+            },
+            {
+                "name": "Delete Ordered Files List file",
+                "type": "Delete",
+                "dependsOn": [
+                    {
+                        "activity": "ForEach1",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.00:30:00",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "dataset": {
+                        "referenceName": "DS_ADLS_Filename",
+                        "type": "DatasetReference",
+                        "parameters": {
+                            "ds_containerName": {
+                                "value": "@pipeline().parameters.adlsContainerName",
+                                "type": "Expression"
+                            },
+                            "ds_filePath": {
+                                "value": "@variables('varProcessFilesPath')",
+                                "type": "Expression"
+                            },
+                            "ds_fileName": {
+                                "value": "@variables('varListFileName')",
+                                "type": "Expression"
+                            }
+                        }
+                    },
+                    "enableLogging": false,
+                    "storeSettings": {
+                        "type": "AzureBlobFSReadSettings",
+                        "recursive": true,
+                        "enablePartitionDiscovery": false
+                    }
+                }
+            }
+        ],
+        "parameters": {
+            "sftpPath": {
+                "type": "string",
+                "defaultValue": "SyncInforToAzure/"
+            },
+            "ProcessedPath": {
+                "type": "string",
+                "defaultValue": "Archive/"
+            },
+            "ErrorPath": {
+                "type": "string",
+                "defaultValue": "Error/"
+            },
+            "EntityName": {
+                "type": "string",
+                "defaultValue": "CustomerAsset"
+            },
+            "adlsContainerName": {
+                "type": "string",
+                "defaultValue": "integration"
+            },
+            "adlsProcessFilesPath": {
+                "type": "string",
+                "defaultValue": "ToD365/Landing/"
+            },
+            "RunningTask_LogID": {
+                "type": "string",
+                "defaultValue": "0"
+            },
+            "RunningTask_TaskName": {
+                "type": "string",
+                "defaultValue": "PL_IntgrID_CustomerAsset_M3ToD365"
+            }
+        },
+        "variables": {
+            "varProcessDateTime": {
+                "type": "String"
+            },
+            "varFilePath": {
+                "type": "String"
+            },
+            "varProcessFilesPath": {
+                "type": "String"
+            },
+            "varListFileName": {
+                "type": "String"
+            },
+            "varRunningTask_LogID": {
+                "type": "String"
+            },
+            "varWarningFileName": {
+                "type": "String"
+            }
+        },
+        "folder": {
+            "name": "Integration Infor-D365"
+        },
+        "annotations": [],
+        "lastPublishTime": "2024-08-12T14:36:48Z"
+    },
+    "type": "Microsoft.DataFactory/factories/pipelines"
+}
